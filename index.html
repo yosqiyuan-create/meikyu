@@ -56,6 +56,50 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 .seg .btn{flex:1;opacity:.55}
 .seg .btn.on{opacity:1;border-color:#ffd400}
 .note{font-size:.8em;color:#9aa6bd;margin-top:6px;line-height:1.5}
+#party{background:#070a12;border-top:1px solid #2a2f3d;padding:3px 6px;font-size:.74em}
+#party:empty{display:none}
+.ptable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ptable th{color:#8fa3c9;font-weight:normal;text-align:left;padding:1px 4px;font-size:.9em}
+.ptable td{padding:1px 4px;white-space:nowrap}
+.ptable td.nm{max-width:9em;overflow:hidden;text-overflow:ellipsis}
+.ptable tr.back td{color:#c9d3e6}
+.ptable tr.sep td{border-top:1px dashed #33405e}
+.ptable .num{text-align:right}
+.hpbad{color:#ff8a7a}
+#town{background:#05070c;z-index:8}
+#townTitle{padding:5px 10px 4px;text-align:center;font-size:.82em;color:#e8d9a8;border-bottom:1px solid #2a2f3d}
+#townTitle .by{color:#c9a227;font-style:italic}
+#townTitle .ver{color:#8fa3c9}
+#townBody{flex:1;overflow:auto;padding:12px}
+#townParty{background:#070a12;border-top:2px solid #2e4a7d;padding:6px 8px;font-size:.8em;min-height:2em}
+.tv h2{margin:0 0 4px;font-size:1.15em;color:#ffd77a}
+.tv .lead{color:#b7c2d8;font-size:.88em;margin:0 0 12px;line-height:1.55}
+.tlist{display:flex;flex-direction:column;gap:9px}
+.tlist .btn{padding:13px 14px;text-align:left;font-size:1em}
+.tlist .btn small{display:block;font-weight:normal;color:#b6c4e2;font-size:.78em;margin-top:2px}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tgrid .btn{padding:12px 8px;font-size:.98em}
+.tgrid .btn.dim,.tlist .btn.dim{opacity:.38}
+.trow{display:flex;gap:8px;margin-top:12px}
+.trow .btn{flex:1;padding:12px}
+.err{color:#ff8a7a;font-size:.88em;min-height:1.3em;margin-top:6px}
+.stbox{background:#101828;border:1px solid #2a3a5c;border-radius:10px;padding:8px 10px}
+.st{display:grid;grid-template-columns:5.2em 2.4em 1fr 1fr;align-items:center;gap:6px;padding:4px 0}
+.st b{font-size:1.15em;text-align:right;font-variant-numeric:tabular-nums}
+.st .btn{padding:8px 0;font-size:1.1em}
+.bonus{font-size:1.05em;margin:10px 0 6px}
+.bonus b{color:#ffd400;font-size:1.3em}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{padding:3px 9px;border-radius:999px;font-size:.82em;border:1px solid #3b4a6b;color:#7f8aa3}
+.chip.ok{border-color:#ffd400;color:#ffe680}
+.kv{display:grid;grid-template-columns:6em 1fr;gap:4px 10px;font-size:.95em}
+.kv span:nth-child(odd){color:#8fa3c9}
+.mem{display:flex;align-items:center;gap:8px;background:#101828;border:1px solid #2a3a5c;border-radius:10px;padding:8px 10px;margin-bottom:7px}
+.mem .i{flex:1;min-width:0}
+.mem .i .n{font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mem .i .d{font-size:.8em;color:#9fb3d9}
+.mem .btn{padding:8px 10px;font-size:.9em}
+input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:2px solid #4a6aa8;background:#000;color:#fff;font-size:1.1em}
 </style>
 </head>
 <body>
@@ -63,6 +107,7 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
   <div id="title"><b>迷宮探索</b> <span class="by">by Urushihara</span> <span class="ver" id="ver"></span></div>
   <div id="status"><span id="pos">B1</span><span class="sub" id="theme"></span></div>
   <div id="viewWrap"><canvas id="view"></canvas><canvas id="mini"></canvas></div>
+  <div id="party"></div>
   <div id="msg"></div>
   <div id="actions"></div>
   <div id="pad">
@@ -94,6 +139,13 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
     <span><i style="background:#ffd400"></i>現在地</span>
     <span><i style="background:transparent;border:2px dashed #4fd1e8"></i>外周は反対側とつながっています</span>
   </div>
+</div>
+
+<div class="screen" id="town">
+  <div id="townTitle"><b>迷宮探索</b> <span class="by">by Urushihara</span> <span class="ver" id="ver3"></span></div>
+  <div class="bar"><div class="t" id="townHead">城塞都市</div><button class="btn sub" id="townMenu">メニュー</button></div>
+  <div id="townBody"></div>
+  <div id="townParty"></div>
 </div>
 
 <div class="screen" id="menuScreen">
@@ -145,7 +197,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v0.2';
+const APP_VERSION = 'v0.3';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -431,8 +483,49 @@ function render(px, py, ang) {
 // ===== state & save =====
 let state, settings = { showAll: false, fs: 1, anim: true, sound: false };
 function newState(seed) {
-  return { v: 1, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {} };
+  return { v: 2, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {}, roster: [], party: [], nextId: 1, location: 'town' };
 }
+function migrate(st) {
+  if (st && st.v === 1) { st.v = 2; st.roster = []; st.party = []; st.nextId = 1; st.location = 'town'; }
+  return st && st.v === 2 ? st : null;
+}
+
+// ===== character data (close to the original "Proving Grounds") =====
+const STATS = ['str', 'iq', 'pie', 'vit', 'agi', 'luc'];
+const STATN = { str: '力', iq: '知恵', pie: '信仰心', vit: '生命力', agi: '素早さ', luc: '運' };
+const RACES = [
+  { id: 'HUM', n: '人間', b: { str: 8, iq: 8, pie: 5, vit: 8, agi: 8, luc: 9 } },
+  { id: 'ELF', n: 'エルフ', b: { str: 7, iq: 10, pie: 10, vit: 6, agi: 9, luc: 6 } },
+  { id: 'DWA', n: 'ドワーフ', b: { str: 10, iq: 7, pie: 10, vit: 10, agi: 5, luc: 6 } },
+  { id: 'GNO', n: 'ノーム', b: { str: 7, iq: 7, pie: 10, vit: 8, agi: 10, luc: 7 } },
+  { id: 'HOB', n: 'ホビット', b: { str: 5, iq: 7, pie: 7, vit: 6, agi: 10, luc: 15 } }
+];
+const ALIGNS = { G: '善', N: '中立', E: '悪' };
+const CLASSES = [
+  { id: 'FIG', n: '戦士', s: '戦', req: { str: 11 }, al: 'GNE', hd: 10 },
+  { id: 'MAG', n: '魔術師', s: '魔', req: { iq: 11 }, al: 'GNE', hd: 4 },
+  { id: 'PRI', n: '僧侶', s: '僧', req: { pie: 11 }, al: 'GE', hd: 8 },
+  { id: 'THI', n: '盗賊', s: '盗', req: { agi: 11 }, al: 'NE', hd: 6 },
+  { id: 'BIS', n: '司教', s: '司', req: { iq: 12, pie: 12 }, al: 'GE', hd: 6 },
+  { id: 'SAM', n: '侍', s: '侍', req: { str: 15, iq: 11, pie: 10, vit: 14, agi: 10 }, al: 'GN', hd: 16 },
+  { id: 'LOR', n: '君主', s: '君', req: { str: 15, iq: 12, pie: 12, vit: 15, agi: 14, luc: 15 }, al: 'G', hd: 10 },
+  { id: 'NIN', n: '忍者', s: '忍', req: { str: 17, iq: 17, pie: 17, vit: 17, agi: 17, luc: 17 }, al: 'E', hd: 6 }
+];
+const MAXSTAT = 18, ROSTER_MAX = 20, PARTY_MAX = 6;
+const raceOf = id => RACES.find(r => r.id === id);
+const clsOf = id => CLASSES.find(c => c.id === id);
+const rnd = n => Math.floor(Math.random() * n);
+function rollBonus() { // 7-10, sometimes +10 (rarely +20)
+  let b = 7 + rnd(4);
+  if (rnd(11) === 0) b += 10;
+  if (b < 20 && rnd(11) === 0) b += 10;
+  return b;
+}
+function canBe(c, stats, al) { return c.al.includes(al) && Object.entries(c.req).every(([k, v]) => stats[k] >= v); }
+const vitBonus = v => v <= 3 ? -2 : v <= 5 ? -1 : v <= 15 ? 0 : v === 16 ? 1 : v === 17 ? 2 : 3;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const charById = id => state.roster.find(c => c.id === id);
+const partyChars = () => state.party.map(charById).filter(Boolean);
 function getExp(lv) {
   if (!state.explored[lv] || state.explored[lv].length !== SIZE * SIZE) state.explored[lv] = '0'.repeat(SIZE * SIZE);
   return state.explored[lv];
@@ -450,7 +543,8 @@ function save() {
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (s && s.state && s.state.v === 1) { state = s.state; Object.assign(settings, s.settings || {}); return true; }
+    const st = s && migrate(s.state);
+    if (st) { state = st; Object.assign(settings, s.settings || {}); return true; }
   } catch (e) { }
   return false;
 }
@@ -496,7 +590,7 @@ function updateActions() {
   const t = getFloor(state.floor).type[state.y][state.x];
   if (t === DOWN) addAct('▼ 階段を降りる', () => changeFloor(1));
   if (t === UP) {
-    if (state.floor === 1) addAct('▲ 街へ戻る（Step 2で作ります）', null);
+    if (state.floor === 1) addAct('▲ 街へ戻る', () => goTown());
     else addAct('▲ 階段を昇る', () => changeFloor(-1));
   }
 }
@@ -504,8 +598,19 @@ function addAct(label, fn) {
   const b = document.createElement('button'); b.className = 'btn act'; b.textContent = label;
   if (fn) b.onclick = fn; else b.disabled = true; actEl.appendChild(b);
 }
+function partyTable(compact) {
+  const ps = partyChars();
+  if (!ps.length) return compact ? '' : '<div class="note" style="margin:0">パーティはいません。酒場で仲間を加えてください。</div>';
+  let h = '<table class="ptable"><tr><th>#</th><th>名前</th><th>職業</th><th class="num">AC</th><th class="num">HP</th><th>状態</th></tr>';
+  ps.forEach((c, i) => {
+    const cl = clsOf(c.cls), low = c.hp < c.maxhp / 3;
+    h += `<tr class="${i >= 3 ? 'back' : ''}${i === 3 ? ' sep' : ''}"><td>${i + 1}</td><td class="nm">${esc(c.name)}</td><td>${c.align}-${compact ? cl.s : cl.n}</td><td class="num">${c.ac}</td><td class="num ${low ? 'hpbad' : ''}">${c.hp}/${c.maxhp}</td><td>${c.status}</td></tr>`;
+  });
+  return h + '</table>';
+}
+function renderParty() { $('party').innerHTML = partyTable(true); }
 function arrive(text) {
-  markExplored(); updateStatus(); updateActions(); drawMini(); save();
+  markExplored(); updateStatus(); updateActions(); drawMini(); renderParty(); save();
   const t = getFloor(state.floor).type[state.y][state.x];
   if (t === DOWN) { say('下り階段がある。'); beep(330, .15, 'triangle'); }
   else if (t === UP) say(state.floor === 1 ? '上り階段がある。地上の街に続いている。' : '上り階段がある。');
@@ -515,6 +620,7 @@ function arrive(text) {
 function act(a) {
   if (a === 'map') return openMap();
   if (a === 'menu') return openMenu();
+  if (state.location !== 'dungeon') return;
   if (animating) { queued = a; return; }
   const [px, py] = camPos(state.x, state.y, state.dir);
   if (a === 'left' || a === 'right' || a === 'back') {
@@ -670,6 +776,192 @@ function ask(text, onYes, yesOnly) {
   $('dlgNo').onclick = () => $('dlg').classList.remove('on');
 }
 
+// ===== town (Step 2) =====
+const townEl = $('town'), townBody = $('townBody');
+let tview = 'main', tmsg = '', cr = null, detailId = null;
+function goTown(text) {
+  state.location = 'town';
+  for (const c of partyChars()) c.inMaze = false;
+  save(); showTown('main', text || '城塞都市に戻ってきた。');
+}
+function enterMaze() {
+  if (!partyChars().length) { showTown('edge', 'パーティがいません。酒場で仲間を加えてください。'); return; }
+  state.location = 'dungeon'; state.floor = 1; state.x = 0; state.y = 0; state.dir = 0; curAng = 0;
+  for (const c of partyChars()) c.inMaze = true;
+  townEl.classList.remove('on'); actEl.innerHTML = '';
+  getFloor(1); renderNow(); arrive(); say('迷宮に足を踏み入れた。地下1階。');
+}
+function showTown(v, m) { tview = v; tmsg = m || ''; townEl.classList.add('on'); renderTown(); }
+const B = (t, label, sub, cls) => `<button class="btn ${cls || ''}" data-t="${t}">${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
+function renderTown() {
+  $('townParty').innerHTML = partyTable(false);
+  const heads = { main: '城塞都市', tavern: 'ギルガメッシュの酒場', add: 'ギルガメッシュの酒場', inn: '冒険者の宿', shop: 'ボルタック商店', temple: 'カント寺院', train: '訓練場', list: '訓練場', detail: '訓練場', create: '訓練場', edge: '町はずれ' };
+  $('townHead').textContent = heads[tview] || '城塞都市';
+  const m = tmsg ? `<p class="lead" style="color:#ffe9a8">${esc(tmsg)}</p>` : '';
+  let h = '';
+  if (tview === 'main') {
+    h = `<div class="tv">${m}<p class="lead">どこへ行きますか？</p><div class="tlist">
+      ${B('go:tavern', 'ギルガメッシュの酒場', 'パーティを組む・外す')}
+      ${B('go:inn', '冒険者の宿', '休んで回復・レベルアップ（Step 3）')}
+      ${B('go:shop', 'ボルタック商店', '武器・防具の売り買い（Step 4）')}
+      ${B('go:temple', 'カント寺院', '死者の蘇生・治療（Step 3）')}
+      ${B('go:edge', '町はずれ', '迷宮の入口・訓練場')}
+    </div></div>`;
+  } else if (tview === 'tavern') {
+    const ps = partyChars();
+    h = `<div class="tv">${m}<p class="lead">冒険者たちが酒を飲んでいる。パーティは最大6人。前の3人が前列、後ろの3人が後列になる。</p>`;
+    ps.forEach((c, i) => {
+      h += `<div class="mem"><div class="i"><div class="n">${i + 1}. ${esc(c.name)}</div><div class="d">${i < 3 ? '前列' : '後列'}　${ALIGNS[c.align]}・${clsOf(c.cls).n}　Lv${c.level}</div></div>
+        <button class="btn" data-t="up:${i}" ${i ? '' : 'disabled style="opacity:.3"'}>▲</button>
+        <button class="btn" data-t="dn:${i}" ${i < ps.length - 1 ? '' : 'disabled style="opacity:.3"'}>▼</button>
+        <button class="btn sub" data-t="rm:${c.id}">外す</button></div>`;
+    });
+    h += `<div class="tlist" style="margin-top:10px">
+      ${ps.length < PARTY_MAX ? B('go:add', '仲間を加える', '訓練場で作ったキャラクターから選ぶ') : ''}
+      ${B('go:main', '酒場を出る')}</div></div>`;
+  } else if (tview === 'add') {
+    const free = state.roster.filter(c => !state.party.includes(c.id));
+    h = `<div class="tv">${m}<p class="lead">誰を仲間に加えますか？</p>`;
+    if (!free.length) h += `<p class="lead">加えられるキャラクターがいません。町はずれの訓練場で作ってください。</p>`;
+    for (const c of free) h += `<div class="mem"><div class="i"><div class="n">${esc(c.name)}</div><div class="d">${ALIGNS[c.align]}・${raceOf(c.race).n}・${clsOf(c.cls).n}　Lv${c.level}　HP ${c.hp}/${c.maxhp}</div></div><button class="btn" data-t="add:${c.id}">加える</button></div>`;
+    h += `<div class="tlist" style="margin-top:10px">${B('go:tavern', '戻る')}</div></div>`;
+  } else if (tview === 'inn' || tview === 'shop' || tview === 'temple') {
+    const t = { inn: ['宿の主人「いらっしゃい。」', '泊まってHPを回復したり、経験値がたまったらレベルアップしたりする場所です。戦闘ができるStep 3で使えるようになります。'],
+      shop: ['ボルタック「何をお探しかな？」', '武器や防具を買ったり売ったり、アイテムを鑑定したりする場所です。アイテムができるStep 4で使えるようになります。'],
+      temple: ['僧侶「神のご加護を。」', '死んだり、灰になったり、石になった仲間を、お布施を払って治してもらう場所です。戦闘ができるStep 3で使えるようになります。'] }[tview];
+    h = `<div class="tv">${m}<h2>${t[0]}</h2><p class="lead">${t[1]}</p><div class="tlist">${B('go:main', '外に出る')}</div></div>`;
+  } else if (tview === 'edge') {
+    h = `<div class="tv">${m}<p class="lead">町はずれ。この先に迷宮の入口がある。</p><div class="tlist">
+      ${B('maze', '迷宮に入る', partyChars().length ? `パーティ ${partyChars().length}人で地下1階へ` : 'パーティがいないと入れません', partyChars().length ? 'act' : 'dim')}
+      ${B('go:train', '訓練場', 'キャラクターを作る・見る・消す')}
+      ${B('go:main', '城塞都市に戻る')}</div></div>`;
+  } else if (tview === 'train') {
+    h = `<div class="tv">${m}<p class="lead">訓練場。登録しているキャラクター：${state.roster.length}／${ROSTER_MAX}人</p><div class="tlist">
+      ${B('newchar', 'キャラクターを作る', '名前・種族・属性・能力値・職業を決める')}
+      ${B('go:list', 'キャラクターを見る', '能力値の確認・削除')}
+      ${B('go:edge', '訓練場を出る')}</div></div>`;
+  } else if (tview === 'list') {
+    h = `<div class="tv">${m}<p class="lead">誰の記録を見ますか？</p>`;
+    if (!state.roster.length) h += `<p class="lead">まだ誰もいません。</p>`;
+    for (const c of state.roster) h += `<div class="mem"><div class="i"><div class="n">${esc(c.name)}${state.party.includes(c.id) ? '　<small style="color:#ffd400">（パーティ）</small>' : ''}</div><div class="d">${ALIGNS[c.align]}・${raceOf(c.race).n}・${clsOf(c.cls).n}　Lv${c.level}</div></div><button class="btn" data-t="detail:${c.id}">見る</button></div>`;
+    h += `<div class="tlist" style="margin-top:10px">${B('go:train', '戻る')}</div></div>`;
+  } else if (tview === 'detail') {
+    const c = charById(detailId); if (!c) { showTown('list'); return; }
+    h = `<div class="tv">${m}<h2>${esc(c.name)}</h2><div class="stbox"><div class="kv">
+      <span>種族</span><span>${raceOf(c.race).n}</span><span>属性</span><span>${ALIGNS[c.align]}</span>
+      <span>職業</span><span>${clsOf(c.cls).n}</span><span>レベル</span><span>${c.level}</span>
+      <span>経験値</span><span>${c.exp}</span><span>HP</span><span>${c.hp} / ${c.maxhp}</span>
+      <span>AC</span><span>${c.ac}</span><span>年齢</span><span>${c.age}歳</span>
+      <span>所持金</span><span>${c.gold} G</span><span>状態</span><span>${c.status}</span>
+      ${STATS.map(k => `<span>${STATN[k]}</span><span>${c.stats[k]}</span>`).join('')}
+      </div></div><p class="note">呪文と装備は、Step 4で表示されるようになります。</p>
+      <div class="trow">${B('go:list', '戻る')}${state.party.includes(c.id) ? '' : B('del:' + c.id, '消す', '', 'sub')}</div></div>`;
+  } else if (tview === 'create') h = renderCreate(m);
+  townBody.innerHTML = h; townBody.scrollTop = 0;
+}
+
+// --- character creation wizard ---
+function renderCreate(m) {
+  const step = cr.step;
+  if (step === 'name') return `<div class="tv">${m}<h2>名前</h2><p class="lead">新しいキャラクターの名前を入れてください（15文字まで）。</p>
+    <input class="name" id="crName" maxlength="15" value="${esc(cr.name || '')}" autocomplete="off"><div class="err" id="crErr"></div>
+    <div class="trow">${B('go:train', 'やめる', '', 'sub')}${B('cr:name', '次へ', '', 'act')}</div></div>`;
+  if (step === 'race') return `<div class="tv">${m}<h2>種族</h2><p class="lead">${esc(cr.name)} の種族を選んでください。</p><div class="tlist">
+    ${RACES.map(r => B('cr:race:' + r.id, r.n, STATS.map(k => `${STATN[k]}${r.b[k]}`).join('　'))).join('')}
+    ${B('cr:back:name', '戻る', '', 'sub')}</div></div>`;
+  if (step === 'align') return `<div class="tv">${m}<h2>属性</h2><p class="lead">属性によって、なれる職業と、一緒にパーティを組める仲間が変わります。善と悪は同じパーティに入れません。</p><div class="tlist">
+    ${B('cr:al:G', '善', '僧侶・司教・侍・君主になれる')}${B('cr:al:N', '中立', '盗賊・侍になれる（僧侶・司教にはなれない）')}${B('cr:al:E', '悪', '僧侶・盗賊・司教・忍者になれる')}
+    ${B('cr:back:race', '戻る', '', 'sub')}</div></div>`;
+  if (step === 'stats') {
+    const r = raceOf(cr.race), ok = CLASSES.filter(c => canBe(c, cr.stats, cr.align));
+    const canAdd = STATS.some(k => cr.stats[k] < MAXSTAT);
+    return `<div class="tv">${m}<h2>能力値</h2><p class="lead">ボーナスポイントを振り分けてください。全部使い切ると職業を選べます。運が悪ければ「振り直す」でやり直せます（原作でいう作り直し）。</p>
+      <div class="bonus">ボーナス残り：<b>${cr.bonus}</b>　<span class="note">（今回の合計 ${cr.total}）</span></div>
+      <div class="stbox">${STATS.map(k => `<div class="st"><span>${STATN[k]}</span><b>${cr.stats[k]}</b>
+        <button class="btn" data-t="cr:dec:${k}" ${cr.stats[k] > r.b[k] ? '' : 'disabled style="opacity:.3"'}>－</button>
+        <button class="btn" data-t="cr:inc:${k}" ${cr.bonus > 0 && cr.stats[k] < MAXSTAT ? '' : 'disabled style="opacity:.3"'}>＋</button></div>`).join('')}</div>
+      <div class="note">なれる職業：</div><div class="chips">${CLASSES.map(c => `<span class="chip ${canBe(c, cr.stats, cr.align) ? 'ok' : ''}">${c.n}</span>`).join('')}</div>
+      <div class="trow">${B('cr:reroll', '振り直す', '', 'sub')}${B('cr:tocls', '職業を選ぶ', '', (cr.bonus === 0 || !canAdd) && ok.length ? 'act' : 'dim')}</div>
+      <div class="trow">${B('cr:back:align', '戻る', '', 'sub')}</div></div>`;
+  }
+  if (step === 'cls') {
+    const ok = CLASSES.filter(c => canBe(c, cr.stats, cr.align));
+    return `<div class="tv">${m}<h2>職業</h2><p class="lead">なれる職業から選んでください。</p><div class="tgrid">
+      ${ok.map(c => B('cr:cls:' + c.id, c.n)).join('')}</div><div class="trow">${B('cr:back:stats', '戻る', '', 'sub')}</div></div>`;
+  }
+  if (step === 'confirm') {
+    const c = clsOf(cr.cls);
+    return `<div class="tv">${m}<h2>このキャラクターを登録しますか？</h2><div class="stbox"><div class="kv">
+      <span>名前</span><span>${esc(cr.name)}</span><span>種族</span><span>${raceOf(cr.race).n}</span>
+      <span>属性</span><span>${ALIGNS[cr.align]}</span><span>職業</span><span>${c.n}</span>
+      ${STATS.map(k => `<span>${STATN[k]}</span><span>${cr.stats[k]}</span>`).join('')}</div></div>
+      <div class="trow">${B('cr:back:cls', 'いいえ', '', 'sub')}${B('cr:save', 'はい', '', 'act')}</div></div>`;
+  }
+  return '';
+}
+function rerollStats() {
+  const r = raceOf(cr.race); cr.stats = { ...r.b }; cr.total = rollBonus(); cr.bonus = cr.total;
+}
+function makeChar() {
+  const c = clsOf(cr.cls), hp = Math.max(2, 1 + rnd(c.hd) + vitBonus(cr.stats.vit));
+  const ch = { id: state.nextId++, name: cr.name, race: cr.race, align: cr.align, cls: cr.cls, level: 1, exp: 0,
+    hp, maxhp: hp, ac: 10, age: 14 + rnd(3), gold: 90 + rnd(100), stats: { ...cr.stats }, status: 'OK', inMaze: false };
+  state.roster.push(ch); return ch;
+}
+function townAct(t) {
+  const [k, a, b] = t.split(':');
+  if (k === 'go') return showTown(a);
+  if (k === 'maze') return enterMaze();
+  if (k === 'add') {
+    const c = charById(+a), ps = partyChars();
+    if (ps.length >= PARTY_MAX) return showTown('tavern', 'パーティはもう6人います。');
+    if ((c.align === 'G' && ps.some(p => p.align === 'E')) || (c.align === 'E' && ps.some(p => p.align === 'G')))
+      return showTown('add', `${c.name} は、今のパーティとは気が合わないようだ。（善と悪は一緒に組めません）`);
+    state.party.push(c.id); save(); return showTown('tavern', `${c.name} がパーティに加わった。`);
+  }
+  if (k === 'rm') { const c = charById(+a); state.party = state.party.filter(id => id !== +a); save(); return showTown('tavern', `${c.name} がパーティを離れた。`); }
+  if (k === 'up' || k === 'dn') {
+    const i = +a, j = k === 'up' ? i - 1 : i + 1, p = state.party;
+    if (j >= 0 && j < p.length) { [p[i], p[j]] = [p[j], p[i]]; save(); }
+    return showTown('tavern');
+  }
+  if (k === 'detail') { detailId = +a; return showTown('detail'); }
+  if (k === 'del') {
+    const c = charById(+a);
+    return ask(`${c.name} を消しますか？\n消したキャラクターは元に戻せません。`, () => {
+      state.roster = state.roster.filter(x => x.id !== +a); save(); showTown('list', `${c.name} を消した。`);
+    });
+  }
+  if (k === 'newchar') {
+    if (state.roster.length >= ROSTER_MAX) return showTown('train', `登録できるのは${ROSTER_MAX}人までです。`);
+    cr = { step: 'name', name: '' }; return showTown('create');
+  }
+  if (k === 'cr') {
+    if (a === 'name') {
+      const v = ($('crName').value || '').trim();
+      if (!v) { $('crErr').textContent = '名前を入れてください。'; return; }
+      if (state.roster.some(c => c.name === v)) { $('crErr').textContent = '同じ名前のキャラクターがいます。'; return; }
+      cr.name = v; cr.step = 'race';
+    } else if (a === 'race') { cr.race = b; cr.step = 'align'; }
+    else if (a === 'al') { cr.align = b; rerollStats(); cr.step = 'stats'; }
+    else if (a === 'inc') { if (cr.bonus > 0 && cr.stats[b] < MAXSTAT) { cr.stats[b]++; cr.bonus--; } }
+    else if (a === 'dec') { if (cr.stats[b] > raceOf(cr.race).b[b]) { cr.stats[b]--; cr.bonus++; } }
+    else if (a === 'reroll') rerollStats();
+    else if (a === 'tocls') {
+      const canAdd = STATS.some(x => cr.stats[x] < MAXSTAT), ok = CLASSES.some(c => canBe(c, cr.stats, cr.align));
+      if (cr.bonus > 0 && canAdd) return showTown('create', 'ボーナスポイントを全部使ってください。');
+      if (!ok) return showTown('create', 'なれる職業がありません。振り分けを変えるか、振り直してください。');
+      cr.step = 'cls';
+    } else if (a === 'cls') { cr.cls = b; cr.step = 'confirm'; }
+    else if (a === 'back') cr.step = b;
+    else if (a === 'save') { const ch = makeChar(); save(); cr = null; return showTown('train', `${ch.name}（${ALIGNS[ch.align]}・${clsOf(ch.cls).n}）を登録した。HP ${ch.hp}、所持金 ${ch.gold} G。`); }
+    return showTown('create');
+  }
+}
+townBody.addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b && !b.disabled) townAct(b.dataset.t); });
+townBody.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'crName') townAct('cr:name'); });
+$('townMenu').onclick = () => openMenu();
+
 // ===== menu =====
 const menuScreen = $('menuScreen');
 function setSeg(id, val) { for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === String(val)); }
@@ -687,17 +979,19 @@ bindSeg('segFs', v => settings.fs = v);
 bindSeg('segAnim', v => settings.anim = !!v);
 bindSeg('segSnd', v => { settings.sound = !!v; beep(660, .1, 'triangle'); });
 function startDungeon(seed) {
-  state = newState(seed); floors = []; curAng = 0;
-  getFloor(1); renderNow(); arrive(); save();
-  say(`地下迷宮の入口、地下1階に降り立った。（シード ${seed}）`);
+  const keep = state ? { roster: state.roster, party: state.party, nextId: state.nextId } : null;
+  state = newState(seed); if (keep) Object.assign(state, keep);
+  floors = []; curAng = 0; getFloor(1);
+  for (const c of partyChars()) c.inMaze = false;
+  save(); renderNow(); showTown('main', `新しい迷宮が生まれた（シード ${seed}）。パーティは城塞都市にいる。`);
 }
-$('newDun').onclick = () => ask('新しいダンジョンを生成しますか？\n今の地図と現在地は消えます。', () => {
+$('newDun').onclick = () => ask('新しいダンジョンを生成しますか？\n今の地図は消え、パーティは街に戻ります。（キャラクターは残ります）', () => {
   startDungeon(1 + Math.floor(Math.random() * 999999)); menuScreen.classList.remove('on');
 });
 $('seedGo').onclick = () => {
   const v = parseInt($('seedIn').value, 10);
   if (!(v > 0)) { ask('1以上の数字を入れてください。', null, true); return; }
-  ask(`シード ${v} でダンジョンを生成しますか？\n今の地図と現在地は消えます。`, () => { startDungeon(v); menuScreen.classList.remove('on'); });
+  ask(`シード ${v} でダンジョンを生成しますか？\n今の地図は消え、パーティは街に戻ります。（キャラクターは残ります）`, () => { startDungeon(v); menuScreen.classList.remove('on'); });
 };
 $('exp').onclick = () => {
   const blob = new Blob([JSON.stringify({ app: 'meikyu', state, settings })], { type: 'application/json' });
@@ -714,10 +1008,11 @@ $('impFile').onchange = e => {
   rd.onload = () => {
     try {
       const s = JSON.parse(rd.result);
-      if (!s.state || s.state.v !== 1) throw 0;
-      state = s.state; Object.assign(settings, s.settings || {}); floors = []; curAng = state.dir * Math.PI / 2;
-      applySettings(); renderNow(); arrive(); save(); refreshMenu();
-      say('セーブデータを読み込んだ。'); menuScreen.classList.remove('on');
+      const st = migrate(s.state); if (!st) throw 0;
+      state = st; Object.assign(settings, s.settings || {}); floors = []; curAng = state.dir * Math.PI / 2;
+      applySettings(); renderNow(); refreshMenu(); menuScreen.classList.remove('on');
+      if (state.location === 'dungeon') { townEl.classList.remove('on'); arrive(); say('セーブデータを読み込んだ。'); }
+      else { save(); showTown('main', 'セーブデータを読み込んだ。'); }
     } catch (err) { ask('このファイルは読み込めませんでした。', null, true); }
   };
   rd.readAsText(f); e.target.value = '';
@@ -735,6 +1030,7 @@ vw.addEventListener('touchend', e => {
 }, { passive: true });
 vw.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 document.addEventListener('keydown', e => {
+  if (townEl.classList.contains('on') && !menuScreen.classList.contains('on')) return;
   if (mapScreen.classList.contains('on') || menuScreen.classList.contains('on')) { if (e.key === 'Escape') { mapScreen.classList.remove('on'); menuScreen.classList.remove('on'); } return; }
   const k = { ArrowUp: 'fwd', w: 'fwd', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'back', s: 'back', m: 'map' }[e.key];
   if (k) { e.preventDefault(); act(k); }
@@ -743,17 +1039,21 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 window.addEventListener('resize', () => drawMini());
 
 // ===== boot =====
-$('ver').textContent = APP_VERSION;
-$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 1）　`;
+$('ver').textContent = APP_VERSION; $('ver3').textContent = APP_VERSION;
+$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 2）　`;
 if (load()) {
-  applySettings(); curAng = state.dir * Math.PI / 2; getFloor(state.floor); renderNow(); arrive();
-  say(`続きから再開した。地下${state.floor}階。`);
-} else { applySettings(); startDungeon(1 + Math.floor(Math.random() * 999999)); }
+  applySettings(); curAng = state.dir * Math.PI / 2; getFloor(state.floor); renderNow();
+  if (state.location === 'dungeon' && partyChars().length) { arrive(); say(`続きから再開した。地下${state.floor}階。`); }
+  else { state.location = 'town'; showTown('main', 'ようこそ、城塞都市へ。'); }
+} else {
+  applySettings(); startDungeon(1 + Math.floor(Math.random() * 999999));
+  showTown('main', 'ようこそ、城塞都市へ。まずは町はずれの訓練場でキャラクターを作り、酒場で仲間を集めましょう。');
+}
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
-window.__meikyu = { getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
+window.__meikyu = { townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
 })();
 </script>
 </body>
