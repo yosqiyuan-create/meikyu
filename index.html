@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="迷宮探索">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>迷宮探索</title>
+<style>
+:root{--fs:17px}
+html,body{margin:0;height:100%;background:#000;color:#eee;font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;overflow:hidden;overscroll-behavior:none}
+body{font-size:var(--fs)}
+#app{display:flex;flex-direction:column;height:100%;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);box-sizing:border-box;max-width:560px;margin:0 auto}
+#title{padding:5px 10px 4px;background:#05070c;text-align:center;font-size:.82em;letter-spacing:.04em;color:#e8d9a8;border-bottom:1px solid #2a2f3d}
+#title .by{color:#c9a227;font-style:italic}
+#title .ver{color:#8fa3c9;margin-left:2px}
+#status{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#101828;border-bottom:2px solid #2e4a7d;font-weight:bold;gap:8px}
+#status .sub{font-weight:normal;font-size:.8em;color:#9fb3d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#viewWrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;flex:none}
+#view{width:100%;height:100%;image-rendering:pixelated;display:block}
+#mini{position:absolute;top:6px;right:6px;width:31%;aspect-ratio:1;border:2px solid #c9a227;border-radius:4px;background:#000;opacity:.92}
+.shake{animation:shake .22s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+#msg{min-height:2.9em;padding:8px 12px;background:#0b0f1a;border-top:1px solid #2a2f3d;line-height:1.45}
+#actions{display:flex;gap:8px;padding:0 10px 4px;background:#0b0f1a;min-height:0}
+#actions:empty{display:none}
+#pad{flex:1;display:grid;grid-template-columns:1fr 1.15fr 1fr;grid-template-rows:1.25fr 1fr;gap:9px;padding:10px;background:#05070c;min-height:150px}
+button{font:inherit;color:#fff;border:none;cursor:pointer}
+.btn{background:linear-gradient(#2c3f6b,#1a2645);border:2px solid #4a6aa8;border-radius:12px;font-weight:bold;font-size:1.05em;box-shadow:0 3px 0 #0a1020}
+.btn:active{transform:translateY(2px);box-shadow:none;background:#3b5590}
+.btn.big{font-size:1.4em}
+.btn.sub{background:linear-gradient(#3a3320,#24200f);border-color:#8a7430}
+.btn.act{flex:1;padding:12px;background:linear-gradient(#6b3a2c,#45231a);border-color:#c0623f}
+.btn.act[disabled]{opacity:.45}
+.screen{position:fixed;inset:0;background:rgba(3,5,12,.97);display:none;flex-direction:column;z-index:10;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.screen.on{display:flex}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#101828;border-bottom:2px solid #2e4a7d}
+.bar .t{flex:1;text-align:center;font-weight:bold}
+.bar .btn{padding:8px 12px;font-size:.95em}
+#mapScroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+#mapCanvas{display:block;margin:0 auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 12px;font-size:.8em;background:#0b0f1a;border-top:1px solid #2a2f3d}
+.legend i{display:inline-block;width:.9em;height:.9em;vertical-align:-.1em;margin-right:4px;border:1px solid #666}
+#menuBody{flex:1;overflow:auto;padding:12px}
+.row{background:#101828;border:1px solid #2a3a5c;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.row h3{margin:0 0 8px;font-size:.95em;color:#c9a227}
+.row .btn{padding:10px 12px;margin:3px 4px 3px 0}
+.row input{font:inherit;width:8em;padding:8px;border-radius:8px;border:1px solid #4a6aa8;background:#000;color:#fff}
+.seg{display:flex;gap:6px}
+.seg .btn{flex:1;opacity:.55}
+.seg .btn.on{opacity:1;border-color:#ffd400}
+.note{font-size:.8em;color:#9aa6bd;margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="title"><b>迷宮探索</b> <span class="by">by Urushihara</span> <span class="ver" id="ver"></span></div>
+  <div id="status"><span id="pos">B1</span><span class="sub" id="theme"></span></div>
+  <div id="viewWrap"><canvas id="view"></canvas><canvas id="mini"></canvas></div>
+  <div id="msg"></div>
+  <div id="actions"></div>
+  <div id="pad">
+    <button class="btn big" data-a="left">↶<br><small>左</small></button>
+    <button class="btn big" data-a="fwd">▲<br><small>前進</small></button>
+    <button class="btn big" data-a="right">↷<br><small>右</small></button>
+    <button class="btn sub" data-a="map">マップ</button>
+    <button class="btn" data-a="back">⟲ 後ろ</button>
+    <button class="btn sub" data-a="menu">メニュー</button>
+  </div>
+</div>
+
+<div class="screen" id="mapScreen">
+  <div class="bar">
+    <button class="btn" id="mPrev">◀</button>
+    <div class="t" id="mTitle">B1</div>
+    <button class="btn" id="mNext">▶</button>
+    <button class="btn" id="mOut">－</button>
+    <button class="btn" id="mIn">＋</button>
+    <button class="btn sub" id="mClose">閉じる</button>
+  </div>
+  <div id="mapScroll"><canvas id="mapCanvas"></canvas></div>
+  <div class="legend">
+    <span><i style="background:#24345a"></i>通路</span>
+    <span><i style="background:#5b4826"></i>部屋</span>
+    <span><i style="background:#1f7a4a"></i>上り階段</span>
+    <span><i style="background:#9a2f25"></i>下り階段</span>
+    <span><i style="background:#f0a830"></i>扉</span>
+    <span><i style="background:#ffd400"></i>現在地</span>
+    <span><i style="background:transparent;border:2px dashed #4fd1e8"></i>外周は反対側とつながっています</span>
+  </div>
+</div>
+
+<div class="screen" id="menuScreen">
+  <div class="bar"><div class="t">メニュー</div><button class="btn sub" id="menuClose">閉じる</button></div>
+  <div id="menuBody">
+    <div class="row"><h3>ダンジョン</h3>
+      <div>現在のシード：<b id="seedNow"></b></div>
+      <button class="btn" id="newDun">新しいダンジョンを生成</button>
+      <div style="margin-top:6px"><input id="seedIn" type="number" inputmode="numeric" placeholder="シード"> <button class="btn" id="seedGo">このシードで生成</button></div>
+      <div class="note">同じシードなら、いつでも同じダンジョンになります。生成し直すと、地図と現在地はB1の入口に戻ります。</div>
+    </div>
+    <div class="row"><h3>マップの表示</h3>
+      <div class="seg" id="segMap"><button class="btn" data-v="0">歩いた所だけ</button><button class="btn" data-v="1">全部表示</button></div>
+      <div class="note">原作風は「歩いた所だけ」です。「全部表示」はテスト用です。</div>
+    </div>
+    <div class="row"><h3>文字の大きさ</h3>
+      <div class="seg" id="segFs"><button class="btn" data-v="0">小</button><button class="btn" data-v="1">中</button><button class="btn" data-v="2">大</button></div>
+    </div>
+    <div class="row"><h3>動きのアニメーション</h3>
+      <div class="seg" id="segAnim"><button class="btn" data-v="1">あり</button><button class="btn" data-v="0">なし（省電力）</button></div>
+    </div>
+    <div class="row"><h3>効果音</h3>
+      <div class="seg" id="segSnd"><button class="btn" data-v="0">オフ</button><button class="btn" data-v="1">オン</button></div>
+    </div>
+    <div class="row"><h3>セーブデータ</h3>
+      <div class="note" style="margin-top:0">1歩ごとに自動で保存しています。念のため、ファイルに書き出しておけます（機種変更のときにも使えます）。</div>
+      <button class="btn" id="exp">書き出す</button>
+      <button class="btn" id="imp">読み込む</button>
+      <input type="file" id="impFile" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="note"><span id="ver2"></span>　操作：ボタン、または画面のスワイプ（上＝前進、左右＝向きを変える、下＝後ろを向く）</div>
+  </div>
+</div>
+
+<div class="screen" id="dlg" style="background:rgba(0,0,0,.75);align-items:center;justify-content:center;z-index:20">
+  <div style="background:#101828;border:2px solid #c9a227;border-radius:14px;padding:16px;width:min(88%,420px)">
+    <div id="dlgMsg" style="line-height:1.6;white-space:pre-line;margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px"><button class="btn" id="dlgNo" style="flex:1;padding:12px">やめる</button><button class="btn act" id="dlgYes" style="flex:1;padding:12px">はい</button></div>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+// ===== constants =====
+const SIZE = 20, FLOORS = 10, MAXD = 6, TS = 64, FT = 32;
+const W = 320, H = 240, HALF = H / 2, PLANE = 0.85, WALLH = 0.75 * H;
+const DV = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // N E S W (y grows north)
+const DN = ['北', '東', '南', '西'];
+const OPEN = 0, WALL = 1, DOOR = 2;
+const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
+const SAVE_KEY = 'meikyu_step1_save';
+const APP_VERSION = 'v0.2';
+const mod = (n, m = SIZE) => ((n % m) + m) % m;
+const $ = id => document.getElementById(id);
+
+function rng(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const THEMES = [
+  { n: '灰青の石壁', b: [96, 112, 146], m: [36, 40, 54], f: [74, 76, 88], c: [30, 32, 44], d: [128, 84, 44] },
+  { n: '苔むした迷宮', b: [74, 122, 72], m: [26, 44, 28], f: [64, 76, 58], c: [24, 34, 24], d: [112, 78, 40] },
+  { n: '赤レンガ', b: [160, 66, 50], m: [58, 36, 32], f: [88, 66, 60], c: [40, 26, 24], d: [92, 62, 36] },
+  { n: '紫水晶', b: [122, 80, 166], m: [44, 30, 66], f: [72, 62, 94], c: [30, 22, 44], d: [154, 112, 60] },
+  { n: '砂岩', b: [180, 148, 94], m: [86, 68, 42], f: [122, 102, 72], c: [50, 42, 30], d: [104, 62, 30] },
+  { n: '氷の回廊', b: [112, 164, 196], m: [48, 80, 102], f: [92, 122, 142], c: [36, 52, 66], d: [82, 92, 124] },
+  { n: '黒曜石', b: [66, 60, 84], m: [118, 94, 160], f: [46, 42, 56], c: [18, 16, 24], d: [124, 42, 42] },
+  { n: '溶岩の洞', b: [124, 48, 32], m: [236, 124, 30], f: [82, 42, 32], c: [34, 16, 12], d: [62, 52, 52] },
+  { n: '骨の間', b: [184, 176, 150], m: [82, 76, 62], f: [112, 106, 92], c: [40, 38, 32], d: [92, 72, 50] },
+  { n: '深淵', b: [52, 44, 104], m: [126, 64, 168], f: [32, 30, 60], c: [10, 8, 20], d: [146, 124, 40] }
+];
+
+// ===== dungeon generation =====
+function grid(v) { const g = []; for (let y = 0; y < SIZE; y++) g.push(new Array(SIZE).fill(v)); return g; }
+
+function getEdge(F, x, y, d) {
+  x = mod(x); y = mod(y);
+  if (d === 0) return F.ns[y][x];
+  if (d === 1) return F.ew[y][x];
+  if (d === 2) return F.ns[mod(y - 1)][x];
+  return F.ew[y][mod(x - 1)];
+}
+
+function tryGen(seed, lv, up, att) {
+  const r = rng((Math.imul(seed, 7919) + Math.imul(lv, 104729) + att * 31) >>> 0);
+  const ri = n => (r() * n) | 0;
+  const ns = grid(WALL), ew = grid(WALL), type = grid(CORR), roomId = grid(-1);
+  const F = { ns, ew, type };
+  const setE = (x, y, d, v) => {
+    x = mod(x); y = mod(y);
+    if (d === 0) ns[y][x] = v; else if (d === 1) ew[y][x] = v;
+    else if (d === 2) ns[mod(y - 1)][x] = v; else ew[y][mod(x - 1)] = v;
+  };
+  // 1. rooms
+  const rooms = [], roomDoors = [];
+  const nRooms = 3 + ri(3) + (lv > 5 ? 1 : 0);
+  for (let k = 0; k < 120 && rooms.length < nRooms; k++) {
+    const w = 3 + ri(3), h = 3 + ri(3), x0 = ri(SIZE), y0 = ri(SIZE);
+    let ok = true;
+    for (let j = -1; j <= h && ok; j++) for (let i = -1; i <= w; i++) {
+      const xx = mod(x0 + i), yy = mod(y0 + j);
+      if (roomId[yy][xx] >= 0 || (Math.abs(xx - up.x) <= 1 && Math.abs(yy - up.y) <= 1)) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const id = rooms.length, cells = [];
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const xx = mod(x0 + i), yy = mod(y0 + j);
+      roomId[yy][xx] = id; type[yy][xx] = ROOM; cells.push([xx, yy]);
+      if (i < w - 1) ew[yy][xx] = OPEN;
+      if (j < h - 1) ns[yy][xx] = OPEN;
+    }
+    rooms.push(cells); roomDoors.push(0);
+  }
+  // 2. maze (recursive backtracker on a torus, rooms act as one node)
+  const vis = grid(0), stack = [];
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const visit = (x, y, d) => {
+    const id = roomId[y][x];
+    if (id >= 0) { for (const [a, b] of shuffle(rooms[id].slice())) { vis[b][a] = 1; stack.push([a, b, -1]); } }
+    else { vis[y][x] = 1; stack.push([x, y, d]); }
+  };
+  visit(up.x, up.y, -1);
+  while (stack.length) {
+    const top = stack[stack.length - 1], [x, y, ld] = top;
+    const id = roomId[y][x];
+    if (id >= 0 && roomDoors[id] >= 3) { stack.pop(); continue; }
+    const opts = [];
+    for (let d = 0; d < 4; d++) { const nx = mod(x + DV[d][0]), ny = mod(y + DV[d][1]); if (!vis[ny][nx]) opts.push(d); }
+    if (!opts.length) { stack.pop(); continue; }
+    let d = opts[ri(opts.length)];
+    if (ld >= 0 && opts.includes(ld) && r() < 0.55) d = ld; // longer straight corridors
+    const nx = mod(x + DV[d][0]), ny = mod(y + DV[d][1]);
+    const nid = roomId[ny][nx];
+    if (id >= 0 || nid >= 0) { setE(x, y, d, DOOR); if (id >= 0) roomDoors[id]++; if (nid >= 0) roomDoors[nid]++; }
+    else setE(x, y, d, OPEN);
+    visit(nx, ny, d);
+  }
+  // 3. loops: open some dead ends and random walls
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+    if (type[y][x] !== CORR) continue;
+    const walls = [0, 1, 2, 3].filter(d => getEdge(F, x, y, d) === WALL);
+    if (walls.length === 3 && r() < 0.45) {
+      const cand = walls.filter(d => roomId[mod(y + DV[d][1])][mod(x + DV[d][0])] < 0);
+      if (cand.length) setE(x, y, cand[ri(cand.length)], OPEN);
+    }
+  }
+  for (let k = 0; k < 14; k++) {
+    const x = ri(SIZE), y = ri(SIZE), d = ri(4);
+    const nx = mod(x + DV[d][0]), ny = mod(y + DV[d][1]);
+    if (roomId[y][x] < 0 && roomId[ny][nx] < 0 && getEdge(F, x, y, d) === WALL) setE(x, y, d, OPEN);
+  }
+  // 4. a few doors in corridors
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) for (const d of [0, 1]) {
+    if (getEdge(F, x, y, d) === OPEN && roomId[y][x] < 0 && r() < 0.035) {
+      const nx = mod(x + DV[d][0]), ny = mod(y + DV[d][1]);
+      if (roomId[ny][nx] < 0 && !(x === up.x && y === up.y)) setE(x, y, d, DOOR);
+    }
+  }
+  // 5. verify connectivity (BFS) and place stairs
+  const dist = grid(-1), q = [[up.x, up.y]]; dist[up.y][up.x] = 0; let seen = 1;
+  while (q.length) {
+    const [x, y] = q.shift();
+    for (let d = 0; d < 4; d++) {
+      if (getEdge(F, x, y, d) === WALL) continue;
+      const nx = mod(x + DV[d][0]), ny = mod(y + DV[d][1]);
+      if (dist[ny][nx] < 0) { dist[ny][nx] = dist[y][x] + 1; seen++; q.push([nx, ny]); }
+    }
+  }
+  if (seen !== SIZE * SIZE) return null;
+  type[up.y][up.x] = UP;
+  let down = null;
+  if (lv < FLOORS) {
+    let best = -1, cand = [];
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (type[y][x] === CORR) best = Math.max(best, dist[y][x]);
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (type[y][x] === CORR && dist[y][x] >= best * 0.85) cand.push([x, y]);
+    const [dx, dy] = cand[ri(cand.length)];
+    down = { x: dx, y: dy }; type[dy][dx] = DOWN;
+  }
+  return { ns, ew, type, up, down, steps: down ? dist[down.y][down.x] : 0 };
+}
+
+function genFloor(seed, lv, up) {
+  for (let att = 0; att < 50; att++) { const f = tryGen(seed, lv, up, att); if (f) return f; }
+  throw new Error('generation failed');
+}
+
+let floors = [];
+function getFloor(lv) {
+  if (!floors[lv]) {
+    const up = lv === 1 ? { x: 0, y: 0 } : getFloor(lv - 1).down;
+    floors[lv] = genFloor(state.seed, lv, up);
+  }
+  return floors[lv];
+}
+
+// ===== textures =====
+const texCache = [];
+function wallTex(th, seed, door) {
+  const c = document.createElement('canvas'); c.width = c.height = TS;
+  const g = c.getContext('2d'), id = g.createImageData(TS, TS), p = id.data, r = rng(seed);
+  const bh = 8, bw = 16, tint = [];
+  for (let i = 0; i < 8; i++) { tint.push([]); for (let j = 0; j < 6; j++) tint[i].push(0.8 + r() * 0.36); }
+  for (let y = 0; y < TS; y++) {
+    const row = (y / bh) | 0, off = (row & 1) ? bw / 2 : 0, yy = y % bh;
+    for (let x = 0; x < TS; x++) {
+      const xx = (x + off) % bw, col = ((x + off) / bw) | 0;
+      const o = (y * TS + x) * 4, n = (r() - 0.5) * 18;
+      if (yy === 0 || xx === 0) { for (let k = 0; k < 3; k++) p[o + k] = th.m[k] + n * 0.5; }
+      else {
+        let f = tint[row][col];
+        if (yy === 1 || xx === 1) f *= 1.16; else if (yy === bh - 1 || xx === bw - 1) f *= 0.74;
+        for (let k = 0; k < 3; k++) p[o + k] = th.b[k] * f + n;
+      }
+      p[o + 3] = 255;
+    }
+  }
+  g.putImageData(id, 0, 0);
+  if (door) {
+    const d = th.d;
+    g.fillStyle = `rgb(${th.b.map(v => Math.min(255, v * 1.25 | 0))})`; g.fillRect(12, 4, 40, 60);
+    g.fillStyle = `rgb(${th.m})`; g.fillRect(15, 7, 34, 57);
+    g.fillStyle = `rgb(${d})`; g.fillRect(17, 9, 30, 55);
+    for (let x = 17; x < 47; x++) for (let y = 9; y < 64; y++) {
+      if ((x - 17) % 7 === 0) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, y, 1, 1); }
+      else if (r() < 0.25) { g.fillStyle = `rgba(${r() < .5 ? '0,0,0' : '255,220,170'},.12)`; g.fillRect(x, y, 1, 1); }
+    }
+    g.fillStyle = '#2b2b30'; g.fillRect(17, 20, 30, 3); g.fillRect(17, 48, 30, 3);
+    g.fillStyle = '#8c8c94'; for (const y of [21, 49]) for (const x of [19, 32, 44]) g.fillRect(x, y, 1, 1);
+    g.strokeStyle = '#d8b34a'; g.lineWidth = 1.5; g.beginPath(); g.arc(41, 37, 2.6, 0, Math.PI * 2); g.stroke();
+  }
+  return c;
+}
+function floorTex(base, seed, kind) {
+  const p = new Uint8ClampedArray(FT * FT * 3), r = rng(seed), half = FT / 2;
+  const tt = [0.85 + r() * .3, 0.85 + r() * .3, 0.85 + r() * .3, 0.85 + r() * .3];
+  for (let y = 0; y < FT; y++) for (let x = 0; x < FT; x++) {
+    const o = (y * FT + x) * 3, n = (r() - .5) * 14;
+    let col = base.slice(), f = tt[(y < half ? 0 : 2) + (x < half ? 0 : 1)];
+    if (kind === 'ceil') f = 1;
+    if (x === 0 || y === 0) f = kind === 'ceil' ? 1.5 : 0.45;
+    else if (kind !== 'ceil' && (x === half || y === half)) f *= 0.7;
+    if (kind === 'up' || kind === 'down') {
+      const cx = Math.abs(x - half + .5), cy = Math.abs(y - half + .5);
+      if (cx < 11 && cy < 11 && x > 0 && y > 0) {
+        const step = ((y - 5) / 4) | 0, edge = (y - 5) % 4 === 0;
+        if (kind === 'up') { col = [70, 170, 110]; f = 0.7 + step * 0.07 + (edge ? .35 : 0); }
+        else { col = [170, 60, 46]; f = 1.1 - step * 0.12 - (edge ? .25 : 0); if (cx < 6 && cy < 6) f *= 0.35; }
+        f = Math.max(0.1, f);
+      }
+    }
+    for (let k = 0; k < 3; k++) p[o + k] = col[k] * f + n;
+  }
+  return p;
+}
+function tex(lv) {
+  if (!texCache[lv]) {
+    const th = THEMES[(lv - 1) % THEMES.length], s = lv * 977;
+    texCache[lv] = {
+      wall: wallTex(th, s, false), door: wallTex(th, s, true),
+      floor: floorTex(th.f, s + 1, 'floor'), up: floorTex(th.f, s + 2, 'up'),
+      down: floorTex(th.f, s + 3, 'down'), ceil: floorTex(th.c, s + 4, 'ceil')
+    };
+  }
+  return texCache[lv];
+}
+
+// ===== renderer (raycasting on a thin-wall grid with wrap-around) =====
+const cv = $('view'), ctx = cv.getContext('2d');
+cv.width = W; cv.height = H; ctx.imageSmoothingEnabled = false;
+const fcImg = ctx.createImageData(W, H), fc = fcImg.data;
+for (let i = 3; i < fc.length; i += 4) fc[i] = 255;
+const shade = d => d >= MAXD ? 0 : Math.min(1, Math.pow(1 - d / MAXD, 0.85) * 1.08);
+
+function render(px, py, ang) {
+  const F = getFloor(state.floor), T = tex(state.floor);
+  const dx = Math.sin(ang), dy = Math.cos(ang), plx = dy * PLANE, ply = -dx * PLANE;
+  // floor & ceiling
+  for (let y = HALF; y < H; y++) {
+    const rd = (WALLH / 2) / (y - HALF + 0.5), s = shade(rd);
+    const rowF = y * W * 4, rowC = (H - 1 - y) * W * 4;
+    if (s <= 0) { for (let x = 0; x < W; x++) { const a = rowF + x * 4, b = rowC + x * 4; fc[a] = fc[a + 1] = fc[a + 2] = fc[b] = fc[b + 1] = fc[b + 2] = 0; } continue; }
+    let fx = px + rd * (dx - plx), fy = py + rd * (dy - ply);
+    const sx = rd * 2 * plx / W, sy = rd * 2 * ply / W, cs = s * 0.85;
+    for (let x = 0; x < W; x++) {
+      const cx = Math.floor(fx), cy = Math.floor(fy);
+      const t = F.type[mod(cy)][mod(cx)];
+      const ft = t === UP ? T.up : t === DOWN ? T.down : T.floor;
+      const ti = ((((fy - cy) * FT) | 0) * FT + (((fx - cx) * FT) | 0)) * 3;
+      const a = rowF + x * 4, b = rowC + x * 4;
+      fc[a] = ft[ti] * s; fc[a + 1] = ft[ti + 1] * s; fc[a + 2] = ft[ti + 2] * s;
+      fc[b] = T.ceil[ti] * cs; fc[b + 1] = T.ceil[ti + 1] * cs; fc[b + 2] = T.ceil[ti + 2] * cs;
+      fx += sx; fy += sy;
+    }
+  }
+  ctx.putImageData(fcImg, 0, 0);
+  // walls
+  for (let x = 0; x < W; x++) {
+    const cam = 2 * x / W - 1, rdx = dx + plx * cam, rdy = dy + ply * cam;
+    let mx = Math.floor(px), my = Math.floor(py);
+    const ddx = rdx === 0 ? 1e30 : Math.abs(1 / rdx), ddy = rdy === 0 ? 1e30 : Math.abs(1 / rdy);
+    const stx = rdx < 0 ? -1 : 1, sty = rdy < 0 ? -1 : 1;
+    let sdx = rdx < 0 ? (px - mx) * ddx : (mx + 1 - px) * ddx;
+    let sdy = rdy < 0 ? (py - my) * ddy : (my + 1 - py) * ddy;
+    let hit = 0, side = 0, dist = 0;
+    for (;;) {
+      if (sdx < sdy) {
+        dist = sdx; if (dist > MAXD) break;
+        const v = F.ew[mod(my)][mod(stx > 0 ? mx : mx - 1)];
+        if (v !== OPEN) { hit = v; side = 0; break; }
+        sdx += ddx; mx += stx;
+      } else {
+        dist = sdy; if (dist > MAXD) break;
+        const v = F.ns[mod(sty > 0 ? my : my - 1)][mod(mx)];
+        if (v !== OPEN) { hit = v; side = 1; break; }
+        sdy += ddy; my += sty;
+      }
+    }
+    if (!hit) continue;
+    dist = Math.max(dist, 0.05);
+    let wx = side === 0 ? py + dist * rdy : px + dist * rdx; wx -= Math.floor(wx);
+    let tx = (wx * TS) | 0;
+    if ((side === 0 && rdx < 0) || (side === 1 && rdy > 0)) tx = TS - 1 - tx;
+    const lh = WALLH / dist, y0 = HALF - lh / 2;
+    ctx.drawImage(hit === DOOR ? T.door : T.wall, tx, 0, 1, TS, x, y0, 1, lh);
+    const a = 1 - shade(dist) * (side ? 0.78 : 1);
+    if (a > 0.01) { ctx.fillStyle = `rgba(0,0,0,${a.toFixed(3)})`; ctx.fillRect(x, y0, 1, lh); }
+  }
+}
+
+// ===== state & save =====
+let state, settings = { showAll: false, fs: 1, anim: true, sound: false };
+function newState(seed) {
+  return { v: 1, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {} };
+}
+function getExp(lv) {
+  if (!state.explored[lv] || state.explored[lv].length !== SIZE * SIZE) state.explored[lv] = '0'.repeat(SIZE * SIZE);
+  return state.explored[lv];
+}
+function markExplored() {
+  const e = getExp(state.floor), i = state.y * SIZE + state.x;
+  if (e[i] !== '1') state.explored[state.floor] = e.slice(0, i) + '1' + e.slice(i + 1);
+  const t = state.trail[state.floor] || (state.trail[state.floor] = []);
+  const last = t[t.length - 1];
+  if (!last || last[0] !== state.x || last[1] !== state.y) { t.push([state.x, state.y]); if (t.length > 400) t.shift(); }
+}
+function save() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ state, settings })); } catch (e) { }
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (s && s.state && s.state.v === 1) { state = s.state; Object.assign(settings, s.settings || {}); return true; }
+  } catch (e) { }
+  return false;
+}
+
+// ===== sound (WebAudio, off by default) =====
+let actx = null;
+function beep(freq, dur, type) {
+  if (!settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'square'; o.frequency.value = freq; g.gain.value = 0.06;
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
+  } catch (e) { }
+}
+
+// ===== camera / animation =====
+const camPos = (x, y, dir) => [x + 0.5 - DV[dir][0] * 0.45, y + 0.5 - DV[dir][1] * 0.45];
+let curAng = 0, animating = false, queued = null;
+function renderNow() { const [px, py] = camPos(state.x, state.y, state.dir); render(px, py, curAng); }
+function animate(from, to, dur, done) {
+  if (!settings.anim) { render(to[0], to[1], to[2]); done(); return; }
+  animating = true; const t0 = performance.now();
+  const step = now => {
+    let k = Math.min(1, (now - t0) / dur); const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    render(from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e, from[2] + (to[2] - from[2]) * e);
+    if (k < 1) requestAnimationFrame(step);
+    else { animating = false; done(); if (queued) { const q = queued; queued = null; act(q); } }
+  };
+  requestAnimationFrame(step);
+}
+
+// ===== UI =====
+const msgEl = $('msg'), actEl = $('actions');
+function say(t) { msgEl.textContent = t; }
+function updateStatus() {
+  $('pos').textContent = `B${state.floor}　X:${state.x} Y:${state.y}　${DN[state.dir]}向き`;
+  $('theme').textContent = THEMES[(state.floor - 1) % THEMES.length].n;
+}
+function updateActions() {
+  actEl.innerHTML = '';
+  const t = getFloor(state.floor).type[state.y][state.x];
+  if (t === DOWN) addAct('▼ 階段を降りる', () => changeFloor(1));
+  if (t === UP) {
+    if (state.floor === 1) addAct('▲ 街へ戻る（Step 2で作ります）', null);
+    else addAct('▲ 階段を昇る', () => changeFloor(-1));
+  }
+}
+function addAct(label, fn) {
+  const b = document.createElement('button'); b.className = 'btn act'; b.textContent = label;
+  if (fn) b.onclick = fn; else b.disabled = true; actEl.appendChild(b);
+}
+function arrive(text) {
+  markExplored(); updateStatus(); updateActions(); drawMini(); save();
+  const t = getFloor(state.floor).type[state.y][state.x];
+  if (t === DOWN) { say('下り階段がある。'); beep(330, .15, 'triangle'); }
+  else if (t === UP) say(state.floor === 1 ? '上り階段がある。地上の街に続いている。' : '上り階段がある。');
+  else say(text || '');
+}
+
+function act(a) {
+  if (a === 'map') return openMap();
+  if (a === 'menu') return openMenu();
+  if (animating) { queued = a; return; }
+  const [px, py] = camPos(state.x, state.y, state.dir);
+  if (a === 'left' || a === 'right' || a === 'back') {
+    const delta = a === 'left' ? -1 : a === 'right' ? 1 : 2;
+    const nd = mod(state.dir + delta, 4), to = curAng + delta * Math.PI / 2;
+    const [qx, qy] = camPos(state.x, state.y, nd);
+    animate([px, py, curAng], [qx, qy, to], a === 'back' ? 260 : 170, () => {
+      curAng = to; state.dir = nd; updateStatus(); drawMini(); save(); say('');
+    });
+    return;
+  }
+  if (a === 'fwd') {
+    const F = getFloor(state.floor), e = getEdge(F, state.x, state.y, state.dir);
+    if (e === WALL) {
+      say('壁にぶつかった。'); beep(90, .12);
+      const vw = $('viewWrap'); vw.classList.remove('shake'); void vw.offsetWidth; vw.classList.add('shake');
+      return;
+    }
+    const [vx, vy] = DV[state.dir];
+    animate([px, py, curAng], [px + vx, py + vy, curAng], e === DOOR ? 260 : 190, () => {
+      state.x = mod(state.x + vx); state.y = mod(state.y + vy);
+      renderNow(); arrive(e === DOOR ? '扉を開けて進んだ。' : '');
+    });
+    if (e === DOOR) beep(180, .1, 'sawtooth');
+  }
+}
+
+function changeFloor(delta) {
+  if (animating) return;
+  state.floor += delta;
+  state.maxFloor = Math.max(state.maxFloor, state.floor);
+  getFloor(state.floor);
+  renderNow();
+  arrive();
+  say(delta > 0 ? `階段を降りて、地下${state.floor}階に着いた。` : `階段を昇って、地下${state.floor}階に戻った。`);
+  beep(delta > 0 ? 220 : 440, .2, 'triangle');
+}
+
+// ===== maps =====
+const COL = { unk: '#0d0f16', corr: '#24345a', room: '#5b4826', up: '#1f7a4a', down: '#9a2f25', wall: '#ece6d4', door: '#f0a830', trail: 'rgba(255,230,80,.5)', pl: '#ffd400', grid: 'rgba(160,180,220,.13)' };
+function drawCells(g, lv, cells, cp, ox, oy) {
+  const F = getFloor(lv), ex = getExp(lv), all = settings.showAll;
+  const known = c => all || ex[c.wy * SIZE + c.wx] === '1';
+  for (const c of cells) {
+    const X = ox + c.sx * cp, Y = oy + c.sy * cp;
+    if (!known(c)) { g.fillStyle = COL.unk; g.fillRect(X, Y, cp, cp); continue; }
+    const t = F.type[c.wy][c.wx];
+    g.fillStyle = t === ROOM ? COL.room : t === UP ? COL.up : t === DOWN ? COL.down : COL.corr;
+    g.fillRect(X, Y, cp, cp);
+    if (t === UP || t === DOWN) {
+      g.fillStyle = '#fff'; g.font = `bold ${cp * .62}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(t === UP ? '上' : '下', X + cp / 2, Y + cp / 2 + 1);
+    }
+  }
+  g.strokeStyle = COL.grid; g.lineWidth = 1;
+  for (const c of cells) g.strokeRect(ox + c.sx * cp + .5, oy + c.sy * cp + .5, cp, cp);
+  const lw = Math.max(2, cp / 7);
+  for (const c of cells) {
+    if (!known(c)) continue;
+    const X = ox + c.sx * cp, Y = oy + c.sy * cp;
+    const segs = [[X, Y, X + cp, Y], [X + cp, Y, X + cp, Y + cp], [X, Y + cp, X + cp, Y + cp], [X, Y, X, Y + cp]];
+    for (let d = 0; d < 4; d++) {
+      const e = getEdge(F, c.wx, c.wy, d); if (e === OPEN) continue;
+      const [a, b, cc, dd] = segs[d];
+      g.strokeStyle = COL.wall; g.lineWidth = lw; g.lineCap = 'square';
+      g.beginPath(); g.moveTo(a, b); g.lineTo(cc, dd); g.stroke();
+      if (e === DOOR) {
+        const mx = (a + cc) / 2, my = (b + dd) / 2, s = cp * .32, horiz = b === dd;
+        g.fillStyle = COL.door;
+        if (horiz) g.fillRect(mx - s / 2, my - lw, s, lw * 2); else g.fillRect(mx - lw, my - s / 2, lw * 2, s);
+      }
+    }
+  }
+}
+function drawArrow(g, cx, cy, s, dir) {
+  g.save(); g.translate(cx, cy); g.rotate(dir * Math.PI / 2);
+  g.beginPath(); g.moveTo(0, -s); g.lineTo(s * .75, s * .7); g.lineTo(0, s * .35); g.lineTo(-s * .75, s * .7); g.closePath();
+  g.fillStyle = COL.pl; g.fill(); g.lineWidth = Math.max(1.5, s / 5); g.strokeStyle = '#000'; g.stroke(); g.restore();
+}
+function sizeCanvas(c, w, h) {
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); return g;
+}
+const mini = $('mini');
+function drawMini() {
+  const w = mini.clientWidth || 110, N = 7, cp = w / N, g = sizeCanvas(mini, w, w);
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, w);
+  const cells = [];
+  for (let sy = 0; sy < N; sy++) for (let sx = 0; sx < N; sx++) cells.push({ sx, sy, wx: mod(state.x + sx - 3), wy: mod(state.y + 3 - sy) });
+  drawCells(g, state.floor, cells, cp, 0, 0);
+  drawArrow(g, 3.5 * cp, 3.5 * cp, cp * .36, state.dir);
+}
+
+let mapLv = 1, mapCp = 0;
+const mapScreen = $('mapScreen'), mapCanvas = $('mapCanvas');
+function openMap() {
+  mapLv = state.floor;
+  if (!mapCp) mapCp = Math.max(12, Math.floor((Math.min(window.innerWidth, 560) - 16) / (SIZE + 2.6)));
+  mapScreen.classList.add('on'); drawFullMap(true);
+}
+function drawFullMap(center) {
+  const cp = mapCp, m = Math.round(cp * 1.3), size = SIZE * cp + m * 2, g = sizeCanvas(mapCanvas, size, size);
+  g.fillStyle = '#05070c'; g.fillRect(0, 0, size, size);
+  const cells = [];
+  for (let sy = 0; sy < SIZE; sy++) for (let sx = 0; sx < SIZE; sx++) cells.push({ sx, sy, wx: sx, wy: SIZE - 1 - sy });
+  drawCells(g, mapLv, cells, cp, m, m);
+  // trail
+  const tr = state.trail[mapLv] || [];
+  g.strokeStyle = COL.trail; g.lineWidth = Math.max(1.5, cp / 6); g.lineJoin = 'round';
+  g.beginPath(); let pen = false;
+  for (let i = 0; i < tr.length; i++) {
+    const [x, y] = tr[i], X = m + (x + .5) * cp, Y = m + (SIZE - 1 - y + .5) * cp;
+    const prev = tr[i - 1], jump = !prev || Math.abs(prev[0] - x) > 1 || Math.abs(prev[1] - y) > 1;
+    if (!pen || jump) { g.moveTo(X, Y); pen = true; } else g.lineTo(X, Y);
+  }
+  g.stroke();
+  // coordinates
+  g.fillStyle = '#9fb3d9'; g.font = `${Math.max(9, cp * .48)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < SIZE; i++) {
+    const c = m + (i + .5) * cp;
+    g.fillText(i, c, m * .5); g.fillText(i, c, size - m * .5);
+    g.fillText(SIZE - 1 - i, m * .5, c); g.fillText(SIZE - 1 - i, size - m * .5, c);
+  }
+  // wrap-around border (edges connect to the opposite side)
+  g.save(); g.strokeStyle = '#4fd1e8'; g.lineWidth = 2; g.setLineDash([cp * .35, cp * .25]);
+  g.strokeRect(m - 3, m - 3, SIZE * cp + 6, SIZE * cp + 6); g.restore();
+  g.fillStyle = '#9fb3d9'; g.font = `bold ${Math.max(10, cp * .5)}px sans-serif`; g.textAlign = 'left';
+  g.fillText('北↑', 4, m * .5);
+  if (mapLv === state.floor) drawArrow(g, m + (state.x + .5) * cp, m + (SIZE - 1 - state.y + .5) * cp, cp * .38, state.dir);
+  $('mTitle').textContent = `地下${mapLv}階` + (mapLv === state.floor ? '（現在地）' : '');
+  $('mPrev').style.visibility = mapLv > 1 ? 'visible' : 'hidden';
+  $('mNext').style.visibility = mapLv < state.maxFloor ? 'visible' : 'hidden';
+  if (center && mapLv === state.floor) {
+    const sc = $('mapScroll');
+    sc.scrollLeft = m + (state.x + .5) * cp - sc.clientWidth / 2;
+    sc.scrollTop = m + (SIZE - 1 - state.y + .5) * cp - sc.clientHeight / 2;
+  }
+}
+$('mClose').onclick = () => mapScreen.classList.remove('on');
+$('mPrev').onclick = () => { if (mapLv > 1) { mapLv--; drawFullMap(); } };
+$('mNext').onclick = () => { if (mapLv < state.maxFloor) { mapLv++; drawFullMap(true); } };
+$('mIn').onclick = () => { mapCp = Math.min(44, mapCp + 4); drawFullMap(true); };
+$('mOut').onclick = () => { mapCp = Math.max(10, mapCp - 4); drawFullMap(true); };
+
+// ===== in-page dialog (no alert/confirm) =====
+function ask(text, onYes, yesOnly) {
+  $('dlgMsg').textContent = text; $('dlg').classList.add('on');
+  $('dlgNo').style.display = yesOnly ? 'none' : '';
+  $('dlgYes').textContent = yesOnly ? 'OK' : 'はい';
+  $('dlgYes').onclick = () => { $('dlg').classList.remove('on'); if (onYes) onYes(); };
+  $('dlgNo').onclick = () => $('dlg').classList.remove('on');
+}
+
+// ===== menu =====
+const menuScreen = $('menuScreen');
+function setSeg(id, val) { for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === String(val)); }
+function refreshMenu() {
+  $('seedNow').textContent = state.seed;
+  setSeg('segMap', settings.showAll ? 1 : 0); setSeg('segFs', settings.fs);
+  setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0);
+}
+function applySettings() { document.documentElement.style.setProperty('--fs', [14, 17, 21][settings.fs] + 'px'); }
+function openMenu() { refreshMenu(); menuScreen.classList.add('on'); }
+$('menuClose').onclick = () => { menuScreen.classList.remove('on'); drawMini(); };
+function bindSeg(id, fn) { for (const b of $(id).children) b.onclick = () => { fn(+b.dataset.v); applySettings(); save(); refreshMenu(); }; }
+bindSeg('segMap', v => settings.showAll = !!v);
+bindSeg('segFs', v => settings.fs = v);
+bindSeg('segAnim', v => settings.anim = !!v);
+bindSeg('segSnd', v => { settings.sound = !!v; beep(660, .1, 'triangle'); });
+function startDungeon(seed) {
+  state = newState(seed); floors = []; curAng = 0;
+  getFloor(1); renderNow(); arrive(); save();
+  say(`地下迷宮の入口、地下1階に降り立った。（シード ${seed}）`);
+}
+$('newDun').onclick = () => ask('新しいダンジョンを生成しますか？\n今の地図と現在地は消えます。', () => {
+  startDungeon(1 + Math.floor(Math.random() * 999999)); menuScreen.classList.remove('on');
+});
+$('seedGo').onclick = () => {
+  const v = parseInt($('seedIn').value, 10);
+  if (!(v > 0)) { ask('1以上の数字を入れてください。', null, true); return; }
+  ask(`シード ${v} でダンジョンを生成しますか？\n今の地図と現在地は消えます。`, () => { startDungeon(v); menuScreen.classList.remove('on'); });
+};
+$('exp').onclick = () => {
+  const blob = new Blob([JSON.stringify({ app: 'meikyu', state, settings })], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  a.download = `meikyu_save_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+$('imp').onclick = () => $('impFile').click();
+$('impFile').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const s = JSON.parse(rd.result);
+      if (!s.state || s.state.v !== 1) throw 0;
+      state = s.state; Object.assign(settings, s.settings || {}); floors = []; curAng = state.dir * Math.PI / 2;
+      applySettings(); renderNow(); arrive(); save(); refreshMenu();
+      say('セーブデータを読み込んだ。'); menuScreen.classList.remove('on');
+    } catch (err) { ask('このファイルは読み込めませんでした。', null, true); }
+  };
+  rd.readAsText(f); e.target.value = '';
+};
+
+// ===== input =====
+for (const b of document.querySelectorAll('#pad .btn')) b.addEventListener('click', () => act(b.dataset.a));
+let ts = null;
+const vw = $('viewWrap');
+vw.addEventListener('touchstart', e => { const t = e.changedTouches[0]; ts = [t.clientX, t.clientY]; }, { passive: true });
+vw.addEventListener('touchend', e => {
+  if (!ts) return; const t = e.changedTouches[0], dx = t.clientX - ts[0], dy = t.clientY - ts[1]; ts = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 28) return;
+  if (Math.abs(dx) > Math.abs(dy)) act(dx < 0 ? 'left' : 'right'); else act(dy < 0 ? 'fwd' : 'back');
+}, { passive: true });
+vw.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+document.addEventListener('keydown', e => {
+  if (mapScreen.classList.contains('on') || menuScreen.classList.contains('on')) { if (e.key === 'Escape') { mapScreen.classList.remove('on'); menuScreen.classList.remove('on'); } return; }
+  const k = { ArrowUp: 'fwd', w: 'fwd', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'back', s: 'back', m: 'map' }[e.key];
+  if (k) { e.preventDefault(); act(k); }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+window.addEventListener('resize', () => drawMini());
+
+// ===== boot =====
+$('ver').textContent = APP_VERSION;
+$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 1）　`;
+if (load()) {
+  applySettings(); curAng = state.dir * Math.PI / 2; getFloor(state.floor); renderNow(); arrive();
+  say(`続きから再開した。地下${state.floor}階。`);
+} else { applySettings(); startDungeon(1 + Math.floor(Math.random() * 999999)); }
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => { });
+}
+window.__meikyu = { getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
+})();
+</script>
+</body>
+</html>
