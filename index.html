@@ -75,7 +75,9 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 .ptable .num{text-align:right}
 .hpbad{color:#ff8a7a}
 #town{background:#05070c;z-index:8}
-#menuScreen,#mapScreen{background:#03050c}
+#menuScreen,#mapScreen,#camp{background:#03050c}
+#camp{z-index:9}
+#menuScreen{z-index:11}
 #townTitle{padding:5px 10px 4px;text-align:center;font-size:.82em;color:#e8d9a8;border-bottom:1px solid #2a2f3d}
 #townTitle .by{color:#c9a227;font-style:italic}
 #townTitle .ver{color:#8fa3c9}
@@ -129,7 +131,7 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
     <button class="btn big" data-a="right">↷<br><small>右</small></button>
     <button class="btn sub" data-a="map">マップ</button>
     <button class="btn" data-a="back">⟲ 後ろ</button>
-    <button class="btn sub" data-a="menu">メニュー</button>
+    <button class="btn sub" data-a="camp">キャンプ</button>
   </div>
   <div id="battle"></div>
 </div>
@@ -150,6 +152,7 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
     <span><i style="background:#1f7a4a"></i>上り階段</span>
     <span><i style="background:#9a2f25"></i>下り階段</span>
     <span><i style="background:#f0a830"></i>扉</span>
+    <span style="color:#6fd3ff">昇 エレベーター</span><span style="color:#ff9a5a">穴 落とし穴・転 テレポーター・回 回転床（見つけた物）</span>
     <span><i style="background:#ffd400"></i>現在地</span>
     <span><i style="background:transparent;border:2px dashed #4fd1e8"></i>外周は反対側とつながっています</span>
   </div>
@@ -160,6 +163,11 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
   <div class="bar"><div class="t" id="townHead">城塞都市</div><button class="btn sub" id="townMenu">メニュー</button></div>
   <div id="townBody"></div>
   <div id="townParty"></div>
+</div>
+
+<div class="screen" id="camp">
+  <div class="bar"><div class="t">キャンプ</div><button class="btn sub" id="campClose">終える</button></div>
+  <div id="campBody" style="flex:1;overflow:auto;padding:12px"></div>
 </div>
 
 <div class="screen" id="menuScreen">
@@ -201,6 +209,9 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
       <button class="btn" id="imp">読み込む</button>
       <input type="file" id="impFile" accept=".json,application/json" style="display:none">
     </div>
+    <div class="row"><h3>ダークゾーンでの現在地</h3>
+      <div class="seg" id="segDark"><button class="btn" data-v="0">？で隠す（原作風）</button><button class="btn" data-v="1">表示する</button></div>
+    </div>
     <div class="note"><span id="ver2"></span>　操作：ボタン、または画面のスワイプ（上＝前進、左右＝向きを変える、下＝後ろを向く）</div>
   </div>
 </div>
@@ -222,7 +233,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v0.5';
+const APP_VERSION = 'v0.6';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -366,7 +377,7 @@ let floors = [];
 function getFloor(lv) {
   if (!floors[lv]) {
     const up = lv === 1 ? { x: 0, y: 0 } : getFloor(lv - 1).down;
-    floors[lv] = genFloor(state.seed, lv, up);
+    floors[lv] = genFloor(state.seed, lv, up); addFeatures(floors[lv], state.seed, lv);
   }
   return floors[lv];
 }
@@ -447,10 +458,12 @@ const cv = $('view'), ctx = cv.getContext('2d');
 cv.width = W; cv.height = H; ctx.imageSmoothingEnabled = false;
 const fcImg = ctx.createImageData(W, H), fc = fcImg.data;
 for (let i = 3; i < fc.length; i += 4) fc[i] = 255;
-const shade = d => d >= MAXD ? 0 : Math.min(1, Math.pow(1 - d / MAXD, 0.85) * 1.08);
+let VIS = MAXD;
+const shade = d => d >= VIS ? 0 : Math.min(1, Math.pow(1 - d / VIS, 0.85) * 1.08);
 
 function render(px, py, ang) {
   const F = getFloor(state.floor), T = tex(state.floor);
+  VIS = (state.light > 0 || state.lightX) ? 6.5 : 3.6;
   const dx = Math.sin(ang), dy = Math.cos(ang), plx = dy * PLANE, ply = -dx * PLANE;
   // floor & ceiling
   for (let y = HALF; y < H; y++) {
@@ -482,12 +495,12 @@ function render(px, py, ang) {
     let hit = 0, side = 0, dist = 0;
     for (;;) {
       if (sdx < sdy) {
-        dist = sdx; if (dist > MAXD) break;
+        dist = sdx; if (dist > VIS) break;
         const v = F.ew[mod(my)][mod(stx > 0 ? mx : mx - 1)];
         if (v !== OPEN) { hit = v; side = 0; break; }
         sdx += ddx; mx += stx;
       } else {
-        dist = sdy; if (dist > MAXD) break;
+        dist = sdy; if (dist > VIS) break;
         const v = F.ns[mod(sty > 0 ? my : my - 1)][mod(mx)];
         if (v !== OPEN) { hit = v; side = 1; break; }
         sdy += ddy; my += sty;
@@ -506,13 +519,13 @@ function render(px, py, ang) {
 }
 
 // ===== state & save =====
-let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: false, bgmVol: 0.6, seVol: 0.7 };
+let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: false, bgmVol: 0.6, seVol: 0.7, darkPos: false };
 function newState(seed) {
   return { v: 2, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {}, roster: [], party: [], nextId: 1, location: 'town' };
 }
 function migrate(st) {
   if (st && st.v === 1) { st.v = 2; st.roster = []; st.party = []; st.nextId = 1; st.location = 'town'; }
-  if (st && st.v === 2) { for (const c of st.roster) { if (c.ageW == null) c.ageW = 0; if (c.poison == null) c.poison = false; c.sleep = false; } }
+  if (st && st.v === 2) { for (const c of st.roster) { if (c.ageW == null) c.ageW = 0; if (c.poison == null) c.poison = false; c.sleep = false; upgradeChar(c); } }
   return st && st.v === 2 ? st : null;
 }
 
@@ -557,6 +570,7 @@ function getExp(lv) {
   return state.explored[lv];
 }
 function markExplored() {
+  if (inDark()) return;
   const e = getExp(state.floor), i = state.y * SIZE + state.x;
   if (e[i] !== '1') state.explored[state.floor] = e.slice(0, i) + '1' + e.slice(i + 1);
   const t = state.trail[state.floor] || (state.trail[state.floor] = []);
@@ -591,7 +605,10 @@ function beep(freq, dur, type) {
 // ===== camera / animation =====
 const camPos = (x, y, dir) => [x + 0.5 - DV[dir][0] * 0.45, y + 0.5 - DV[dir][1] * 0.45];
 let curAng = 0, animating = false, queued = null;
-function renderNow() { const [px, py] = camPos(state.x, state.y, state.dir); render(px, py, curAng); }
+function renderNow() {
+  const [px, py] = camPos(state.x, state.y, state.dir); render(px, py, curAng);
+  if (typeof inDark === 'function' && inDark()) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#333'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('真っ暗で何も見えない', W / 2, H / 2); }
+}
 function animate(from, to, dur, done) {
   if (!settings.anim) { render(to[0], to[1], to[2]); done(); return; }
   animating = true; const t0 = performance.now();
@@ -608,13 +625,14 @@ function animate(from, to, dur, done) {
 const msgEl = $('msg'), actEl = $('actions');
 function say(t) { msgEl.textContent = t; }
 function updateStatus() {
-  $('pos').textContent = `B${state.floor}　X:${state.x} Y:${state.y}　${DN[state.dir]}向き`;
+  $('pos').textContent = inDark() && !settings.darkPos ? `B${state.floor}　X:？ Y:？　？` : `B${state.floor}　X:${state.x} Y:${state.y}　${DN[state.dir]}向き`;
   $('theme').textContent = THEMES[(state.floor - 1) % THEMES.length].n;
 }
 function updateActions() {
   actEl.innerHTML = '';
   if (BT) return;
   if (bodiesHere().length) addAct(`倒れた仲間（${bodiesHere().length}人）を連れていく`, () => pickUpBodies());
+  if (featAt(state.floor, state.x, state.y) === 5) addAct('エレベーターに乗る', () => elevatorMenu());
   const t = getFloor(state.floor).type[state.y][state.x];
   if (t === DOWN) addAct('▼ 階段を降りる', () => changeFloor(1));
   if (t === UP) {
@@ -642,6 +660,7 @@ function arrive(text) {
   const t = getFloor(state.floor).type[state.y][state.x];
   if (bodiesHere().length) say(`${bodiesHere().map(c => c.name).join('、')} が倒れている……`);
   else if (t === DOWN) { say('下り階段がある。'); }
+  else if (featAt(state.floor, state.x, state.y) === 5) say('エレベーターがある。');
   else if (t === UP) say(state.floor === 1 ? '上り階段がある。地上の街に続いている。' : '上り階段がある。');
   else say(text || '');
 }
@@ -649,6 +668,7 @@ function arrive(text) {
 function act(a) {
   if (a === 'map') return openMap();
   if (a === 'menu') return openMenu();
+  if (a === 'camp') return openCamp();
   if (state.location !== 'dungeon' || BT) return;
   if (animating) { queued = a; return; }
   const [px, py] = camPos(state.x, state.y, state.dir);
@@ -671,9 +691,10 @@ function act(a) {
     const [vx, vy] = DV[state.dir];
     animate([px, py, curAng], [px + vx, py + vy, curAng], e === DOOR ? 260 : 190, () => {
       state.x = mod(state.x + vx); state.y = mod(state.y + vy);
+      if (state.light > 0) state.light--;
       renderNow(); arrive(e === DOOR ? '扉を開けて進んだ。' : '');
       const pm = poisonStep(); if (pm === 'wipe') return; if (pm) say(pm);
-      checkEncounter();
+      stepFeatures().then(r => { if (r !== 'stop' && !BT) checkEncounter(); });
     });
     if (e === DOOR) sfx('door'); else sfx('step');
   }
@@ -704,6 +725,12 @@ function drawCells(g, lv, cells, cp, ox, oy) {
     if (t === UP || t === DOWN) {
       g.fillStyle = '#fff'; g.font = `bold ${cp * .62}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(t === UP ? '上' : '下', X + cp / 2, Y + cp / 2 + 1);
+    }
+    const fk = F.feat ? F.feat[c.wy][c.wx] : 0, fnd = state.found && state.found[lv] && state.found[lv].includes(c.wy * SIZE + c.wx);
+    if (fk && (fk === 5 || fnd || all)) {
+      const sym = { 1: '暗', 2: '回', 3: '転', 4: '穴', 5: '昇' }[fk];
+      g.fillStyle = fk === 5 ? '#6fd3ff' : fk === 1 ? '#888' : '#ff9a5a'; g.font = `bold ${cp * .55}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(sym, X + cp / 2, Y + cp / 2 + 1);
     }
   }
   g.strokeStyle = COL.grid; g.lineWidth = 1;
@@ -744,7 +771,8 @@ function drawMini() {
   const cells = [];
   for (let sy = 0; sy < N; sy++) for (let sx = 0; sx < N; sx++) cells.push({ sx, sy, wx: mod(state.x + sx - 3), wy: mod(state.y + 3 - sy) });
   drawCells(g, state.floor, cells, cp, 0, 0);
-  drawArrow(g, 3.5 * cp, 3.5 * cp, cp * .36, state.dir);
+  if (inDark() && !settings.darkPos) { g.fillStyle = '#ffd400'; g.font = `bold ${cp * .8}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 3.5 * cp, 3.5 * cp); }
+  else drawArrow(g, 3.5 * cp, 3.5 * cp, cp * .36, state.dir);
 }
 
 let mapLv = 1, mapCp = 0;
@@ -782,7 +810,7 @@ function drawFullMap(center) {
   g.strokeRect(m - 3, m - 3, SIZE * cp + 6, SIZE * cp + 6); g.restore();
   g.fillStyle = '#9fb3d9'; g.font = `bold ${Math.max(10, cp * .5)}px sans-serif`; g.textAlign = 'left';
   g.fillText('北↑', 4, m * .5);
-  if (mapLv === state.floor) drawArrow(g, m + (state.x + .5) * cp, m + (SIZE - 1 - state.y + .5) * cp, cp * .38, state.dir);
+  if (mapLv === state.floor && !(inDark() && !settings.darkPos)) drawArrow(g, m + (state.x + .5) * cp, m + (SIZE - 1 - state.y + .5) * cp, cp * .38, state.dir);
   $('mTitle').textContent = `地下${mapLv}階` + (mapLv === state.floor ? '（現在地）' : '');
   $('mPrev').style.visibility = mapLv > 1 ? 'visible' : 'hidden';
   $('mNext').style.visibility = mapLv < state.maxFloor ? 'visible' : 'hidden';
@@ -1213,8 +1241,22 @@ function renderBattleUI() {
   else if (BT.mode === 'cmd') {
     const c = ps[BT.ci], front = BT.ci < 3;
     h += `<div class="bq"><b>${esc(c.name)}</b> はどうする？</div><div class="bbtns">
-      ${BB('c:fight', '戦う', 'act', !front)}${BB('c:parry', '防御')}${BB('c:spell', '呪文', 'dim', true)}${BB('c:run', '逃げる', 'sub')}
-      ${BT.ci > 0 || BT.cmds.length ? BB('c:undo', 'やり直す', 'sub') : ''}</div>${front ? '' : '<div class="note">後列からは直接攻撃できません。呪文はStep 4で使えるようになります。</div>'}`;
+      ${BB('c:fight', '戦う', 'act', !front)}${BB('c:parry', '防御')}${BB('c:spell', '呪文', '', !battleSpells(c).length)}${BB('c:item', 'アイテム', '', !battleItems(c).length)}${BB('c:run', '逃げる', 'sub')}
+      ${BT.ci > 0 || BT.cmds.length ? BB('c:undo', 'やり直す', 'sub') : ''}</div>${front ? '' : '<div class="note">後列からは直接攻撃できません。</div>'}`;
+  } else if (BT.mode === 'spell') {
+    const c = ps[BT.ci];
+    h += `<div class="bq"><b>${esc(c.name)}</b> はどの呪文を唱える？</div><div class="bbtns">` + battleSpells(c).map(p => BB('sp:' + p.n, `${p.n} <small>Lv${p.lv} 残${c.mp[p.s][p.lv - 1]}</small>`)).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+  } else if (BT.mode === 'item') {
+    const c = ps[BT.ci];
+    h += `<div class="bq">どれを使う？</div><div class="bbtns">` + battleItems(c).map(x => BB('it:' + c.items.indexOf(x), itName(x))).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+  } else if (BT.mode === 'ally') {
+    h += `<div class="bq">誰に？</div><div class="bbtns">` + ps.map((x, i) => BB('al:' + i, `${esc(x.name)} ${x.hp}/${x.maxhp}`)).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+  } else if (BT.mode === 'chest') {
+    const th = bestThief(), pr = priestWith('カルフォ');
+    h += `<div class="bq">宝箱がある！${BT.chest.guess ? `（調べた結果：${BT.chest.guess}）` : ''}</div><div class="bbtns">
+      ${BB('ch:open', '開ける', 'act')}${BB('ch:look', `調べる${th ? '（' + esc(th.name) + '）' : ''}`, '', !th)}${BB('ch:dis', '罠を外す', '', !th)}${BB('ch:calfo', 'カルフォ', '', !pr)}${BB('ch:leave', '立ち去る', 'sub')}</div>`;
+  } else if (BT.mode === 'disarm') {
+    h += `<div class="bq">どの罠だと思う？（外れると作動するかも）</div><div class="bbtns">` + TRAPS.map(t => BB('tr:' + t, t)).join('') + BB('ch:back', '戻る', 'sub') + '</div>';
   } else if (BT.mode === 'target') {
     h += `<div class="bq">どのグループを攻撃する？</div><div class="bbtns">` +
       BT.groups.map((g, i) => liveMons(g).length ? BB('t:' + i, `${i + 1}) ${esc(groupName(g))}`) : '').join('') + BB('t:back', '戻る', 'sub') + '</div>';
@@ -1237,9 +1279,42 @@ battleEl.addEventListener('click', e => {
     say(changed.length ? `${changed.join('、')} は、友好的な相手に剣を向けたことで心が濁った……（属性が悪になった）` : '友好的な相手に襲いかかった！');
     return beginCommands();
   }
-  if (t === 'c:fight') { BT.mode = 'target'; return renderBattleUI(); }
+  if (t === 'c:fight') { BT.pend = { a: 'fight' }; BT.mode = 'target'; return renderBattleUI(); }
+  if (t === 'c:spell') { BT.mode = 'spell'; return renderBattleUI(); }
+  if (t === 'c:item') { BT.mode = 'item'; return renderBattleUI(); }
   if (t === 't:back') { BT.mode = 'cmd'; return renderBattleUI(); }
-  if (t.startsWith('t:')) { BT.cmds.push({ c: ps[BT.ci], a: 'fight', g: +t.slice(2) }); return nextCommander(); }
+  if (t.startsWith('sp:') || t.startsWith('it:')) {
+    const c = ps[BT.ci], isSp = t.startsWith('sp:'), inv = isSp ? null : c.items[+t.slice(3)], p = isSp ? spellByName(t.slice(3)) : spellByName(ITEMS[inv.t].use);
+    BT.pend = { a: isSp ? 'spell' : 'item', p, inv };
+    if (p.tg === 'one' || p.tg === 'grp') { BT.mode = 'target'; return renderBattleUI(); }
+    if (p.tg === 'ally') { BT.mode = 'ally'; return renderBattleUI(); }
+    BT.cmds.push({ c, a: BT.pend.a, p, inv }); return nextCommander();
+  }
+  if (t.startsWith('al:')) { const c = ps[BT.ci]; BT.cmds.push({ c, a: BT.pend.a, p: BT.pend.p, inv: BT.pend.inv, ally: ps[+t.slice(3)] }); return nextCommander(); }
+  if (t.startsWith('t:')) {
+    const c = ps[BT.ci], pd = BT.pend || { a: 'fight' };
+    BT.cmds.push({ c, a: pd.a, g: +t.slice(2), p: pd.p, inv: pd.inv }); return nextCommander();
+  }
+  if (t === 'ch:open') { const th = bestThief() || ps.find(standing); return openChest(th); }
+  if (t === 'ch:leave') { BT.mode = 'end'; say('宝箱をそのままにして立ち去った。'); return renderBattleUI(); }
+  if (t === 'ch:back') { BT.mode = 'chest'; return renderBattleUI(); }
+  if (t === 'ch:dis') { BT.mode = 'disarm'; return renderBattleUI(); }
+  if (t === 'ch:look') {
+    const th = bestThief(), skill = th.cls === 'THI' || th.cls === 'NIN' ? 55 + th.level * 4 + th.stats.agi : 10 + th.stats.agi;
+    BT.chest.guess = rnd(100) < Math.min(95, skill) ? BT.chest.trap : TRAPS[rnd(TRAPS.length)];
+    say(`${th.name} は宝箱を調べた……「${BT.chest.guess}」だと思う。`); return renderBattleUI();
+  }
+  if (t === 'ch:calfo') {
+    const pr = priestWith('カルフォ'); pr.mp.P[1]--; BT.chest.guess = rnd(100) < 95 ? BT.chest.trap : TRAPS[rnd(TRAPS.length)];
+    sfx('spell'); say(`${pr.name} はカルフォを唱えた。罠は「${BT.chest.guess}」だ。`); return renderBattleUI();
+  }
+  if (t.startsWith('tr:')) {
+    const th = bestThief(), name = t.slice(3), ch = BT.chest;
+    const skill = th.cls === 'THI' || th.cls === 'NIN' ? 60 + th.level * 3 + th.stats.agi / 2 : 15 + th.stats.agi;
+    if (name === ch.trap && (ch.trap === '罠なし' || rnd(100) < Math.min(95, skill))) { ch.disarmed = true; say(ch.trap === '罠なし' ? '罠はなかった。' : `${th.name} は罠を外した！`); return openChest(th); }
+    if (name === ch.trap) { say(`${th.name} は罠を外しそこねた……`); return openChest(th); }
+    say('罠を見誤った！'); return openChest(th);
+  }
   if (t === 'c:parry') { BT.cmds.push({ c: ps[BT.ci], a: 'parry' }); return nextCommander(); }
   if (t === 'c:run') { BT.mode = 'run'; renderBattleUI(); return tryRun(); }
   if (t === 'c:undo') return beginCommands();
@@ -1274,10 +1349,13 @@ async function runRound(monstersOnly, partyFailedRun) {
   for (const c of ps) c.parry = BT.cmds.some(x => x.c === c && x.a === 'parry');
   acts.sort((a, b) => b.ini - a.ini);
   for (const a of acts) {
-    if (!liveGroups().length || !partyChars().some(standing)) break;
+    if (!BT) return;
+    if (BT.escaped || !liveGroups().length || !partyChars().some(standing)) break;
     if (a.who === 'c') await charAction(a.cm); else await monAction(a);
+    if (!BT) return;
     renderParty(); drawBattle();
   }
+  if (BT.escaped) { endBattle(); renderNow(); arrive('戦いから逃れた。'); return; }
   BT.surprise = null;
   // end of round: identification, sleep wake-up, poison
   for (const g of BT.groups) if (!g.known && liveMons(g).length && rnd(100) < 30) { g.known = true; await show(`正体がわかった。${g.m.u} は ${g.m.n} だ！`, 800); }
@@ -1293,17 +1371,27 @@ async function runRound(monstersOnly, partyFailedRun) {
 }
 async function charAction(cm) {
   const c = cm.c; if (!canAct(c)) return;
+  if (cm.a === 'spell' || cm.a === 'item') {
+    if (cm.a === 'spell' && !castable(c, cm.p)) return;
+    if (cm.a === 'item' && !c.items.includes(cm.inv)) return;
+    let tg = cm.g != null ? { g: cm.g } : cm.ally ? { c: cm.ally } : null;
+    if (tg && tg.g != null && !liveMons(BT.groups[tg.g]).length) { const gi = BT.groups.findIndex(g => liveMons(g).length); if (gi < 0) return; tg = { g: gi }; }
+    const r = await doSpell(c, cm.p, tg, show, true, cm.a === 'item' ? cm.inv : null);
+    if (cm.a === 'item') c.items.splice(c.items.indexOf(cm.inv), 1);
+    if (r === 'escape' && BT) BT.escaped = true;
+    return;
+  }
   if (cm.a !== 'fight') return;
   let gi = cm.g; if (!liveMons(BT.groups[gi]).length) { gi = BT.groups.findIndex(g => liveMons(g).length); if (gi < 0) return; }
   const g = BT.groups[gi], tgt = liveMons(g)[rnd(liveMons(g).length)];
-  const swings = 1 + Math.floor(c.level / (c.cls === 'NIN' ? 4 : FIGHTER[c.cls] >= 1 ? 5 : 99)), [n, d] = WEAPON[c.cls];
+  const wp = weaponOf(c), swings = 1 + Math.floor(c.level / (c.cls === 'NIN' ? 4 : FIGHTER[c.cls] >= 1 ? 5 : 99)), [n, d] = wp.d;
   let hits = 0, dmg = 0;
   for (let i = 0; i < swings; i++) {
-    const p = 0.42 + 0.028 * c.level * FIGHTER[c.cls] + 0.04 * strHit(c.stats.str) + 0.03 * g.m.ac + (tgt.sleep ? 0.3 : 0);
-    if (Math.random() < Math.max(0.05, Math.min(0.95, p))) { hits++; dmg += Math.max(1, roll(n, d) + strDmg(c.stats.str)) * (tgt.sleep ? 2 : 1); }
+    const p = 0.42 + 0.028 * c.level * FIGHTER[c.cls] + 0.04 * (strHit(c.stats.str) + wp.h) + 0.03 * (g.m.ac + (g.acMod || 0)) + (tgt.sleep ? 0.3 : 0);
+    if (Math.random() < Math.max(0.05, Math.min(0.95, p))) { hits++; dmg += Math.max(1, roll(n, d) + wp.b + strDmg(c.stats.str)) * (tgt.sleep ? 2 : 1); }
   }
   // ninja critical (beheading)
-  if (c.cls === 'NIN' && hits && rnd(100) < Math.min(20, c.level) && g.m.lv + 10 < rnd(35)) dmg = tgt.hp;
+  if ((c.cls === 'NIN' || wp.crit) && hits && rnd(100) < Math.min(20, c.level + (wp.crit ? 5 : 0)) && g.m.lv + 10 < rnd(35)) { dmg = tgt.hp; await show(`${c.name} の会心の一撃！　首をはねた！`, 700); }
   if (!hits) { sfx('miss'); return show(`${c.name} は ${groupName(g)} に斬りかかったが、外れた。`); }
   tgt.hp -= dmg; sfx('hit');
   let t = `${c.name} は ${groupName(g)} に ${hits}回当たり、${dmg} のダメージ。`;
@@ -1335,15 +1423,15 @@ async function monAction(a) {
     }
     return;
   }
-  if (fl.includes('M') && r < 35) return monSpell(g, mon, nm);
-  if (fl.includes('H') && r < 30) {
+  if (fl.includes('M') && r < 35 && !g.silent) return monSpell(g, mon, nm);
+  if (fl.includes('H') && r < 30 && !g.silent) {
     if (rnd(2)) { const heal = roll(1 + Math.floor(M.tier / 2), 8); g.mons.forEach(x => { if (x.hp > 0) x.hp = Math.min(x.max, x.hp + heal); }); sfx('heal'); return show(`${nm} は祈りを唱え、傷を癒やした。`); }
     const tg = ps.filter(standing); if (!tg.length) return; const c = tg[rnd(tg.length)]; sfx('spell');
     return hitChar(c, roll(Math.max(1, Math.floor(M.tier / 2)), 8), `${nm} は呪いの祈りを唱えた！`);
   }
   // melee: only the front three
   const tg = partyTargets(); if (!tg.length) return;
-  const c = tg[rnd(tg.length)], ac = c.ac - (c.parry ? 2 : 0);
+  const c = tg[rnd(tg.length)], ac = c.ac - (c.parry ? 2 : 0) - (c.bac || 0) - (BT.pac || 0) - (state.pac || 0);
   let hits = 0, dmg = 0;
   for (let i = 0; i < M.att; i++) {
     const p = 0.2 + 0.035 * M.lv + 0.03 * ac + (c.sleep ? 0.3 : 0);
@@ -1383,14 +1471,16 @@ async function victory() {
   const each = alive.length ? Math.floor(BT.exp / alive.length) : 0;
   for (const c of alive) c.exp += each;
   let gold = 0;
-  if (BT.room) { gold = BT.groups.reduce((a, g) => a + g.m.tier * (20 + rnd(60)) * g.mons.length, 0); const per = Math.floor(gold / Math.max(1, alive.length)); for (const c of alive) c.gold += per; }
+
   jingle('win');
   let t = `魔物たちを倒した！　生き残った者はそれぞれ ${each} の経験値を得た。`;
-  if (gold) { t += `　玄室の奥で ${gold} G を見つけた。`; sfx('gold'); }
+
   const ready = alive.filter(c => c.exp >= expNext(c)).map(c => c.name);
   if (ready.length) t += `　${ready.join('、')} はレベルが上がる準備ができた（宿で休むと上がる）。`;
   if (BT.room) clearedRooms.add(state.floor + ':' + BT.roomId);
-  say(t); BT.mode = 'end'; renderBattleUI(); sortParty(); renderParty(); save();
+  say(t); sortParty(); renderParty(); save();
+  if (BT.room && partyChars().some(standing)) { BT.chest = makeChest(); BT.mode = 'chest'; } else BT.mode = 'end';
+  renderBattleUI();
 }
 async function wipe() {
   jingle('wipe'); stopMusic();
@@ -1404,7 +1494,7 @@ async function wipe() {
 }
 function endBattle(won, ran) {
   BT = null; battleEl.style.display = 'none'; padEl.style.display = '';
-  for (const c of partyChars()) { c.sleep = false; c.parry = false; }
+  for (const c of partyChars()) { c.sleep = false; c.parry = false; c.bac = 0; }
   sortParty(); playMusic('maze'); renderNow(); renderParty(); updateActions(); save();
 }
 function finishBattleView() { endBattle(true); say(''); arrive(); }
@@ -1437,11 +1527,340 @@ function pickUpBodies() {
   say(n ? `倒れていた仲間 ${n}人 を連れていくことにした。` : 'パーティがいっぱいで、連れていけない。');
 }
 
+// ===== items & equipment (Step 4) =====
+// kind: W weapon, A armour, S shield, H helm, G gauntlets, X usable.  cls: class letters or '*'
+const CL = { FIG: 'F', MAG: 'M', PRI: 'P', THI: 'T', BIS: 'B', SAM: 'S', LOR: 'L', NIN: 'N' };
+const KIND_N = { W: '武器', A: '鎧', S: '盾', H: '兜', G: '籠手', X: '道具' };
+const IT = (n, k, p, cls, o) => Object.assign({ n, k, p, cls, d: null, b: 0, h: 0, ac: 0, t: 0, cur: 0, crit: 0, use: null }, o || {});
+const ITEMS = [
+  IT('ダガー', 'W', 5, 'FTSNMB', { d: [1, 4] }), IT('スタッフ', 'W', 10, '*', { d: [1, 5] }),
+  IT('ショートソード', 'W', 15, 'FTSLN', { d: [1, 6] }), IT('ロングソード', 'W', 25, 'FSL', { d: [1, 8] }),
+  IT('メイス', 'W', 30, 'FPBSL', { d: [2, 3] }), IT('バトルアックス', 'W', 120, 'FSL', { d: [1, 10] }),
+  IT('ダガー+1', 'W', 1500, 'FTSNMB', { d: [1, 4], b: 1, h: 1, t: 2 }), IT('ショートソード+1', 'W', 2500, 'FTSLN', { d: [1, 6], b: 1, h: 1, t: 2 }),
+  IT('ロングソード+1', 'W', 3500, 'FSL', { d: [1, 8], b: 1, h: 1, t: 3 }), IT('メイス+1', 'W', 3000, 'FPBSL', { d: [2, 3], b: 1, h: 1, t: 3 }),
+  IT('スタッフ+2', 'W', 6000, '*', { d: [1, 5], b: 2, h: 2, t: 4 }), IT('ショートソード+2', 'W', 9000, 'FTSLN', { d: [1, 6], b: 2, h: 2, t: 5 }),
+  IT('ロングソード+2', 'W', 12000, 'FSL', { d: [1, 8], b: 2, h: 2, t: 5 }), IT('メイス+2', 'W', 10000, 'FPBSL', { d: [2, 3], b: 2, h: 2, t: 5 }),
+  IT('斬首の剣', 'W', 60000, 'FSL', { d: [1, 10], b: 3, h: 3, crit: 1, t: 7 }), IT('手裏剣', 'W', 80000, 'N', { d: [1, 15], b: 2, h: 5, crit: 1, t: 8 }),
+  IT('妖刀ムラマサ', 'W', 200000, 'S', { d: [10, 5], h: 5, t: 9 }), IT('呪われた剣', 'W', 1000, 'FSL', { d: [1, 8], b: -1, h: -2, cur: 1, t: 2 }),
+  IT('ローブ', 'A', 15, '*', { ac: 1 }), IT('レザーアーマー', 'A', 50, 'FPTSLN', { ac: 2 }), IT('チェインメイル', 'A', 90, 'FPSL', { ac: 3 }),
+  IT('ブレストプレート', 'A', 200, 'FPSL', { ac: 4 }), IT('プレートメイル', 'A', 750, 'FSL', { ac: 5 }),
+  IT('レザーアーマー+1', 'A', 1500, 'FPTSLN', { ac: 3, t: 2 }), IT('チェインメイル+1', 'A', 1500, 'FPSL', { ac: 4, t: 3 }),
+  IT('プレートメイル+1', 'A', 6000, 'FSL', { ac: 6, t: 4 }), IT('チェインメイル+2', 'A', 8000, 'FPSL', { ac: 5, t: 5 }),
+  IT('プレートメイル+2', 'A', 20000, 'FSL', { ac: 7, t: 6 }), IT('君主の聖衣', 'A', 150000, 'L', { ac: 10, t: 9 }),
+  IT('呪われたローブ', 'A', 500, '*', { ac: -2, cur: 1, t: 2 }),
+  IT('スモールシールド', 'S', 20, 'FPTSL', { ac: 2 }), IT('ラージシールド', 'S', 40, 'FPSL', { ac: 3 }),
+  IT('シールド+1', 'S', 1500, 'FPTSL', { ac: 3, t: 3 }), IT('シールド+2', 'S', 7000, 'FPSL', { ac: 4, t: 5 }),
+  IT('呪われた盾', 'S', 500, 'FPTSL', { ac: -1, cur: 1, t: 3 }),
+  IT('ヘルム', 'H', 100, 'FPSL', { ac: 1 }), IT('ヘルム+1', 'H', 3000, 'FPSL', { ac: 2, t: 4 }),
+  IT('銅の籠手', 'G', 6000, 'FPSL', { ac: 1, t: 4 }), IT('銀の籠手', 'G', 60000, 'FPSL', { ac: 3, t: 8 }),
+  IT('ディオスの薬', 'X', 100, '*', { use: 'ディオス', t: 1 }), IT('ラツモフィスの薬', 'X', 300, '*', { use: 'ラツモフィス', t: 1 }),
+  IT('ディアルの薬', 'X', 800, '*', { use: 'ディアル', t: 3 }), IT('ハリトの巻物', 'X', 500, '*', { use: 'ハリト', t: 1 }),
+  IT('カティノの巻物', 'X', 500, '*', { use: 'カティノ', t: 1 }), IT('バディオスの巻物', 'X', 500, '*', { use: 'バディオス', t: 2 }),
+  IT('マハリトの巻物', 'X', 3000, '*', { use: 'マハリト', t: 4 })
+];
+ITEMS.forEach((it, i) => it.i = i);
+const itemByName = n => ITEMS.find(x => x.n === n);
+const isBase = it => !it.t && !it.cur;
+const canUse = (c, it) => it.cls === '*' || it.cls.includes(CL[c.cls]);
+const itName = inv => { const it = ITEMS[inv.t]; return inv.k ? it.n : `？${KIND_N[it.k]}`; };
+const STARTER = { FIG: ['ロングソード'], SAM: ['ロングソード'], LOR: ['ロングソード'], PRI: ['メイス'], THI: ['ショートソード'], NIN: ['ダガー'], MAG: ['スタッフ', 'ローブ'], BIS: ['スタッフ', 'ローブ'] };
+function giveStarter(c) {
+  c.items = c.items || [];
+  for (const n of STARTER[c.cls]) c.items.push({ t: itemByName(n).i, k: true, e: true });
+  recalc(c);
+}
+const equipped = (c, kind) => (c.items || []).find(x => x.e && ITEMS[x.t].k === kind);
+function recalc(c) { // AC from equipment + permanent buffs
+  let ac = 10; for (const x of c.items || []) if (x.e) ac -= ITEMS[x.t].ac;
+  c.ac = ac;
+}
+function weaponOf(c) { const w = equipped(c, 'W'); return w ? ITEMS[w.t] : IT('素手', 'W', 0, '*', { d: [1, 2] }); }
+
+// ===== spells (Step 4) =====
+// tg: one=enemy one, grp=enemy group, all=all enemies, ally=one party member, party=whole party, self, none
+const SP = (n, s, lv, tg, when, d) => ({ n, s, lv, tg, when, d });
+const SPELLS = [
+  SP('ハリト', 'M', 1, 'one', 'B', '炎の玉（1d8）'), SP('モグレフ', 'M', 1, 'self', 'B', '自分のACを2下げる'),
+  SP('カティノ', 'M', 1, 'grp', 'B', '1グループを眠らせる'), SP('デュマピック', 'M', 1, 'none', 'C', '現在地を知る'),
+  SP('ディルト', 'M', 2, 'grp', 'B', '敵1グループのACを2上げる'), SP('ソピック', 'M', 2, 'self', 'B', '自分のACを4下げる'),
+  SP('マハリト', 'M', 3, 'grp', 'B', '炎の嵐（4d6）'), SP('モリト', 'M', 3, 'grp', 'B', '火花（3d6）'),
+  SP('モーリス', 'M', 4, 'grp', 'B', '敵1グループのACを3上げる'), SP('ダルト', 'M', 4, 'grp', 'B', '冷気（6d6）'), SP('ラハリト', 'M', 4, 'grp', 'B', '業火（6d6）'),
+  SP('マモーリス', 'M', 5, 'all', 'B', '敵全体のACを3上げる'), SP('マカニト', 'M', 5, 'all', 'B', '弱い敵を窒息させる（レベル8未満・不死以外）'), SP('マダルト', 'M', 5, 'grp', 'B', '凍てつく嵐（8d8）'),
+  SP('ラカニト', 'M', 6, 'grp', 'B', '1グループを窒息させる'), SP('ジルワン', 'M', 6, 'one', 'B', '不死の敵を消し去る'), SP('マソピック', 'M', 6, 'party', 'B', '全員のACを4下げる'), SP('ハマン', 'M', 6, 'none', 'B', '何かが起こる'),
+  SP('マロール', 'M', 7, 'none', 'BC', 'テレポート'), SP('マハマン', 'M', 7, 'none', 'B', '大いなる何かが起こる'), SP('ティルトウェイト', 'M', 7, 'all', 'B', '核の炎（10d15）'),
+  SP('カルキ', 'P', 1, 'party', 'B', '全員のACを1下げる'), SP('ディオス', 'P', 1, 'ally', 'BC', 'HPを1d8回復'), SP('バディオス', 'P', 1, 'one', 'B', '1d8のダメージ'),
+  SP('ミルワ', 'P', 1, 'none', 'BC', 'しばらく明るくなる'), SP('ポーフィック', 'P', 1, 'self', 'B', '自分のACを4下げる'),
+  SP('マツ', 'P', 2, 'party', 'B', '全員のACを2下げる'), SP('カルフォ', 'P', 2, 'none', '', '宝箱の罠を見破る'), SP('マニフォ', 'P', 2, 'grp', 'B', '1グループを金縛りにする'), SP('モンティノ', 'P', 2, 'grp', 'B', '1グループの呪文を封じる'),
+  SP('ロミルワ', 'P', 3, 'none', 'BC', '街に戻るまで明るい'), SP('ディアルコ', 'P', 3, 'ally', 'BC', '麻痺・眠りを治す'), SP('ラツマピック', 'P', 3, 'none', 'B', '敵の正体を見破る'), SP('バマツ', 'P', 3, 'party', 'B', '全員のACを4下げる'),
+  SP('ディアル', 'P', 4, 'ally', 'BC', 'HPを2d8回復'), SP('バディアル', 'P', 4, 'one', 'B', '2d8のダメージ'), SP('ラツモフィス', 'P', 4, 'ally', 'BC', '毒を治す'), SP('マポーフィック', 'P', 4, 'none', 'BC', '街に戻るまで全員のACを2下げる'),
+  SP('ディアルマ', 'P', 5, 'ally', 'BC', 'HPを3d8回復'), SP('バディアルマ', 'P', 5, 'one', 'B', '3d8のダメージ'), SP('リトカン', 'P', 5, 'grp', 'B', '炎の柱（3d8）'),
+  SP('カンディ', 'P', 5, 'none', 'C', '迷宮に残った仲間の場所を知る'), SP('ディ', 'P', 5, 'ally', 'C', '死者を生き返らせる'), SP('バディ', 'P', 5, 'one', 'B', '敵1体を即死させる'),
+  SP('ロルト', 'P', 6, 'grp', 'B', '刃の嵐（6d6）'), SP('マディ', 'P', 6, 'ally', 'BC', 'HP全快・状態異常を治す'), SP('マバディ', 'P', 6, 'one', 'B', '敵1体のHPを1d8にする'), SP('ロクトフェイト', 'P', 6, 'none', 'BC', '街へ帰る（所持金を失う）'),
+  SP('マリクト', 'P', 7, 'all', 'B', '天の怒り（12d6）'), SP('カドルト', 'P', 7, 'ally', 'C', '死者・灰を完全に生き返らせる')
+];
+const spellByName = n => SPELLS.find(s => s.n === n);
+// character level at which each spell level becomes available
+function learnLv(c, s, L) {
+  const t = { MAG: { M: [1, 2] }, PRI: { P: [1, 2] }, BIS: { M: [1, 4], P: [4, 4] }, SAM: { M: [4, 3] }, LOR: { P: [4, 3] } }[c.cls];
+  if (!t || !t[s]) return 99; return t[s][0] + (L - 1) * t[s][1];
+}
+function maxSlots(c, s, L) {
+  const ll = learnLv(c, s, L); if (c.level < ll) return 0;
+  if (!(c.spells || []).some(n => { const p = spellByName(n); return p.s === s && p.lv === L; })) return 0;
+  return Math.min(9, 1 + Math.floor((c.level - ll) / 2));
+}
+function refillMP(c) { c.mp = { M: [], P: [] }; for (const s of ['M', 'P']) for (let L = 1; L <= 7; L++) c.mp[s][L - 1] = maxSlots(c, s, L); }
+function learnSpells(c, initial) { // returns names of newly learnt spells
+  c.spells = c.spells || []; const got = [];
+  for (const s of ['M', 'P']) for (let L = 1; L <= 7; L++) {
+    if (c.level < learnLv(c, s, L)) continue;
+    const pool = SPELLS.filter(p => p.s === s && p.lv === L && !c.spells.includes(p.n));
+    const stat = s === 'M' ? c.stats.iq : c.stats.pie;
+    let any = c.spells.some(n => { const p = spellByName(n); return p.s === s && p.lv === L; });
+    for (const p of pool) if (rnd(30) < stat || (!any && p === pool[0])) { c.spells.push(p.n); got.push(p.n); any = true; }
+  }
+  if (initial) { // the original starting spells
+    const st = { MAG: ['ハリト', 'カティノ'], PRI: ['ディオス', 'バディオス'], BIS: ['ハリト'] }[c.cls] || [];
+    c.spells = c.spells.filter(n => spellByName(n).lv > 1 || st.includes(n)); for (const n of st) if (!c.spells.includes(n)) c.spells.push(n);
+  }
+  return got;
+}
+const castable = (c, p) => c.status === 'OK' && !c.sleep && c.mp && c.mp[p.s][p.lv - 1] > 0;
+function upgradeChar(c) { // bring old saves up to Step 4
+  if (!c.items) giveStarter(c);
+  if (!c.spells) { learnSpells(c, true); refillMP(c); }
+  if (!c.mp) refillMP(c);
+  recalc(c);
+}
+
+// ===== spell effects (battle and camp) =====
+function healChar(t, n) { const b = t.hp; t.hp = Math.min(t.maxhp, t.hp + n); return t.hp - b; }
+async function spellOnGroupDamage(g, n, d, out, label) {
+  let tot = 0, kill = 0, res = 0;
+  for (const m of liveMons(g)) {
+    if (rnd(100) < g.m.res) { res++; continue; }
+    const dm = roll(n, d); m.hp -= dm; tot += dm; if (m.hp <= 0) { m.hp = 0; kill++; BT.exp += g.m.exp; }
+  }
+  await out(`${groupName(g)} に ${label || ''}合計 ${tot} のダメージ。${kill ? kill + '匹を倒した！' : ''}${res ? `（${res}匹は呪文をはね返した）` : ''}`);
+  if (kill) sfx('kill');
+}
+async function doSpell(c, p, tg, out, inBattle, item) {
+  if (!item) c.mp[p.s][p.lv - 1]--;
+  sfx('spell');
+  await out(item ? `${c.name} は ${itName(item)} を使った。` : `${c.name} は ${p.n} を唱えた！`);
+  const g = tg && tg.g != null && BT ? BT.groups[tg.g] : null;
+  const ally = tg && tg.c ? tg.c : null;
+  const ps = partyChars();
+  const dmgSpell = { 'マハリト': [4, 6], 'モリト': [3, 6], 'ダルト': [6, 6], 'ラハリト': [6, 6], 'マダルト': [8, 8], 'リトカン': [3, 8], 'ロルト': [6, 6] };
+  const oneSpell = { 'ハリト': [1, 8], 'バディオス': [1, 8], 'バディアル': [2, 8], 'バディアルマ': [3, 8] };
+  const healSpell = { 'ディオス': [1, 8], 'ディアル': [2, 8], 'ディアルマ': [3, 8] };
+  const n = p.n;
+  if (dmgSpell[n] && g) return spellOnGroupDamage(g, dmgSpell[n][0], dmgSpell[n][1], out);
+  if (oneSpell[n] && g) {
+    const m = liveMons(g)[rnd(liveMons(g).length)]; if (!m) return;
+    if (rnd(100) < g.m.res) return out(`${groupName(g)} は呪文をはね返した。`);
+    const dm = roll(...oneSpell[n]); m.hp -= dm;
+    if (m.hp <= 0) { m.hp = 0; BT.exp += g.m.exp; sfx('kill'); return out(`${groupName(g)} に ${dm} のダメージ。倒した！`); }
+    return out(`${groupName(g)} に ${dm} のダメージ。`);
+  }
+  if (healSpell[n] && ally) {
+    if (ally.status !== 'OK') return out(`${ally.name} には効かなかった。`);
+    const h = healChar(ally, roll(...healSpell[n])); sfx('heal'); return out(`${ally.name} のHPが ${h} 回復した。（${ally.hp}/${ally.maxhp}）`);
+  }
+  switch (n) {
+    case 'ティルトウェイト': case 'マリクト':
+      for (const gg of liveGroups()) await spellOnGroupDamage(gg, n === 'マリクト' ? 12 : 10, n === 'マリクト' ? 6 : 15, out); return;
+    case 'カティノ': case 'マニフォ': {
+      let s = 0; for (const m of liveMons(g)) if (rnd(100) >= g.m.res && (n === 'マニフォ' || g.m.lv < 8 + rnd(4))) { m.sleep = true; s++; }
+      return out(s ? `${groupName(g)} の ${s}匹が${n === 'カティノ' ? '眠った' : '金縛りになった'}。` : '効かなかった。');
+    }
+    case 'モンティノ': if (rnd(100) >= g.m.res) { g.silent = true; return out(`${groupName(g)} は呪文を唱えられなくなった。`); } return out('効かなかった。');
+    case 'ディルト': g.acMod = (g.acMod || 0) + 2; return out(`${groupName(g)} の守りが弱まった。`);
+    case 'モーリス': g.acMod = (g.acMod || 0) + 3; return out(`${groupName(g)} はおびえている。`);
+    case 'マモーリス': for (const gg of liveGroups()) gg.acMod = (gg.acMod || 0) + 3; return out('敵はみなおびえている。');
+    case 'モグレフ': c.bac = (c.bac || 0) + 2; return out(`${c.name} の守りが固くなった。`);
+    case 'ソピック': case 'ポーフィック': c.bac = (c.bac || 0) + 4; return out(`${c.name} の守りが固くなった。`);
+    case 'カルキ': BT.pac = (BT.pac || 0) + 1; return out('パーティの守りが固くなった。');
+    case 'マツ': BT.pac = (BT.pac || 0) + 2; return out('パーティの守りが固くなった。');
+    case 'バマツ': case 'マソピック': BT.pac = (BT.pac || 0) + 4; return out('パーティの守りが大きく固くなった。');
+    case 'マポーフィック': state.pac = 2; for (const x of ps) recalc(x); return out('街に戻るまで、パーティの守りが固くなった。');
+    case 'ラツマピック': for (const gg of BT.groups) gg.known = true; drawBattle(); return out('敵の正体がすべてわかった。');
+    case 'マカニト': {
+      let k = 0; for (const gg of liveGroups()) if (gg.m.lv < 8 && gg.m.ty !== 'UND') for (const m of liveMons(gg)) if (rnd(100) >= gg.m.res) { m.hp = 0; k++; BT.exp += gg.m.exp; }
+      return out(k ? `${k}匹の敵が息絶えた。` : '効かなかった。');
+    }
+    case 'ラカニト': { let k = 0; for (const m of liveMons(g)) if (rnd(100) >= g.m.res + 10) { m.hp = 0; k++; BT.exp += g.m.exp; } return out(k ? `${groupName(g)} の ${k}匹が息絶えた。` : '効かなかった。'); }
+    case 'ジルワン': { if (g.m.ty !== 'UND') return out('効かなかった。（不死の敵にしか効かない）'); for (const m of liveMons(g)) { m.hp = 0; BT.exp += g.m.exp; } return out(`${groupName(g)} は消え去った！`); }
+    case 'バディ': { const m = liveMons(g)[0]; if (m && rnd(100) >= g.m.res + 25) { m.hp = 0; BT.exp += g.m.exp; return out(`${groupName(g)} を1体、即死させた！`); } return out('効かなかった。'); }
+    case 'マバディ': { const m = liveMons(g)[0]; if (m && rnd(100) >= g.m.res) { m.hp = Math.min(m.hp, roll(1, 8)); return out(`${groupName(g)} の生命力を奪った。`); } return out('効かなかった。'); }
+    case 'ハマン': case 'マハマン': {
+      const r = rnd(3);
+      if (r === 0) { for (const x of ps) if (x.status === 'OK') x.hp = x.maxhp; sfx('heal'); return out('光が満ち、全員の傷が癒えた！'); }
+      if (r === 1 && inBattle) { for (const gg of liveGroups()) await spellOnGroupDamage(gg, n === 'マハマン' ? 12 : 8, 10, out); return; }
+      if (inBattle) { BT.pac = (BT.pac || 0) + 10; return out('見えない盾がパーティを包んだ！'); }
+      return out('何も起こらなかった。');
+    }
+    case 'ミルワ': state.light = Math.max(state.light || 0, 40); return out('あたりが明るくなった。');
+    case 'ロミルワ': state.lightX = true; return out('魔法の光がパーティを照らす。（街に戻るまで）');
+    case 'デュマピック': return out(`現在地は地下${state.floor}階、X:${state.x} Y:${state.y}、${DN[state.dir]}向き。`);
+    case 'カンディ': {
+      const bs = state.roster.filter(x => x.inMaze && !state.party.includes(x.id) && x.loc);
+      return out(bs.length ? bs.map(x => `${x.name}：地下${x.loc.f}階 X:${x.loc.x} Y:${x.loc.y}`).join('\n') : '迷宮に残っている仲間はいない。');
+    }
+    case 'ディアルコ': if (ally.status === '麻痺') ally.status = 'OK'; ally.sleep = false; return out(`${ally.name} は動けるようになった。`);
+    case 'ラツモフィス': ally.poison = false; return out(`${ally.name} の毒が消えた。`);
+    case 'マディ': if (ally.status === '死亡' || ally.status === '灰' || ally.status === '石化') return out('効かなかった。'); ally.status = 'OK'; ally.hp = ally.maxhp; ally.poison = false; ally.sleep = false; sfx('heal'); return out(`${ally.name} は完全に回復した！`);
+    case 'ディ':
+      if (ally.status !== '死亡') return out('死者にしか効かない。');
+      if (rnd(100) < Math.min(95, 50 + ally.stats.vit * 3)) { ally.status = 'OK'; ally.hp = 1; ally.stats.vit = Math.max(3, ally.stats.vit - 1); sfx('heal'); return out(`${ally.name} は生き返った！`); }
+      ally.status = '灰'; return out(`失敗した……${ally.name} は灰になった。`);
+    case 'カドルト':
+      if (ally.status !== '死亡' && ally.status !== '灰') return out('死者か灰にしか効かない。');
+      ally.status = 'OK'; ally.hp = ally.maxhp; sfx('heal'); return out(`${ally.name} は完全に生き返った！`);
+    case 'ロクトフェイト': {
+      c.spells = c.spells.filter(x => x !== 'ロクトフェイト');
+      for (const x of ps) x.gold = 0;
+      await out('パーティは光に包まれ、城塞都市へ運ばれた。（所持金は失われ、呪文も忘れてしまった）');
+      if (BT) { BT = null; battleEl.style.display = 'none'; padEl.style.display = ''; }
+      closeCamp(); goTown('ロクトフェイトで城塞都市に戻った。所持金は失われた。'); return 'town';
+    }
+    case 'マロール':
+      if (inBattle) {
+        const F = getFloor(state.floor); state.x = rnd(SIZE); state.y = rnd(SIZE);
+        await out('パーティは別の場所へ飛ばされた！'); return 'escape';
+      }
+      return 'malor';
+  }
+  return out('何も起こらなかった。');
+}
+// ===== battle: spells & items =====
+function battleSpells(c) { return (c.spells || []).map(spellByName).filter(p => p.when.includes('B') && castable(c, p)); }
+function battleItems(c) { return (c.items || []).filter(x => { const it = ITEMS[x.t]; return it.k === 'X' && it.use && spellByName(it.use).when.includes('B'); }); }
+
+// ===== chests & traps =====
+const TRAPS = ['罠なし', '毒針', 'クロスボウの矢', 'ガス爆弾', '爆弾', '石化の罠', 'スタナー', 'テレポーター', '警報', 'メイジブラスター', 'プリーストブラスター'];
+function makeChest() {
+  const f = state.floor;
+  const trap = rnd(100) < Math.max(15, 45 - f * 3) ? '罠なし' : TRAPS[1 + rnd(Math.min(TRAPS.length - 1, 4 + f))];
+  const gold = BT.groups.reduce((a, g) => a + g.m.tier * (25 + rnd(70)) * g.mons.length, 0);
+  let item = null;
+  if (rnd(100) < 35 + f * 4) {
+    const pool = ITEMS.filter(it => it.t <= f + 1 && (it.t || rnd(3) === 0));
+    const it = pool[rnd(pool.length)]; item = { t: it.i, k: isBase(it), e: false };
+  }
+  return { trap, gold, item, guess: null };
+}
+function bestThief() {
+  const ps = partyChars().filter(c => c.status === 'OK');
+  return ps.find(c => c.cls === 'THI') || ps.find(c => c.cls === 'NIN') || ps.sort((a, b) => b.stats.agi - a.stats.agi)[0];
+}
+function priestWith(name) { return partyChars().find(c => (c.spells || []).includes(name) && castable(c, spellByName(name))); }
+async function trapGoesOff(opener) {
+  const ch = BT.chest, f = state.floor, ps = partyChars().filter(c => c.status === 'OK');
+  if (ch.trap === '罠なし') return;
+  sfx('hurt'); await show(`罠だ！　${ch.trap}！`, 900);
+  const luck = c => rnd(20) < c.stats.luc / 2;
+  switch (ch.trap) {
+    case '毒針': opener.poison = true; return show(`${opener.name} は毒に冒された。`);
+    case 'クロスボウの矢': return hitChar(opener, roll(1 + Math.floor(f / 2), 8), '矢が飛んできた！');
+    case 'ガス爆弾': for (const c of ps) if (!luck(c)) c.poison = true; return show('毒ガスが広がった。');
+    case '爆弾': for (const c of ps) await hitChar(c, roll(1 + Math.floor(f / 2), 6), ''); return;
+    case '石化の罠': if (!luck(opener)) { charDies(opener, '石化'); return show(`${opener.name} は石になった！`); } return show(`${opener.name} はかろうじて逃れた。`);
+    case 'スタナー': if (!luck(opener)) { opener.status = '麻痺'; return show(`${opener.name} は麻痺した！`); } return show(`${opener.name} はかろうじて逃れた。`);
+    case 'メイジブラスター': case 'プリーストブラスター': {
+      const cls = ch.trap === 'メイジブラスター' ? ['MAG', 'BIS', 'SAM'] : ['PRI', 'BIS', 'LOR'];
+      for (const c of ps) if (cls.includes(c.cls) && !luck(c)) c.status = '麻痺';
+      return show('呪文使いたちが麻痺した！');
+    }
+    case 'テレポーター': state.x = rnd(SIZE); state.y = rnd(SIZE); ch.tele = true; return show('パーティはどこかへ飛ばされた！');
+    case '警報': ch.alarm = true; return show('警報が鳴り響いた！');
+  }
+}
+async function openChest(opener) {
+  const ch = BT.chest; BT.mode = 'run'; renderBattleUI();
+  if (!ch.disarmed) await trapGoesOff(opener);
+  const alive = partyChars().filter(c => c.status === 'OK' || c.status === '麻痺');
+  if (alive.length) {
+    const per = Math.floor(ch.gold / alive.length); for (const c of alive) c.gold += per;
+    sfx('gold'); let t = `宝箱の中に ${ch.gold} G があった。`;
+    if (ch.item) {
+      const who = partyChars().find(c => (c.items || []).length < 8 && c.status !== 'ロスト');
+      if (who) { who.items.push(ch.item); t += `　${who.name} は ${itName(ch.item)} を手に入れた。`; } else t += '　アイテムもあったが、持ちきれなかった。';
+    }
+    await show(t, 1400);
+  }
+  sortParty(); renderParty(); save();
+  if (!partyChars().some(standing)) return wipe();
+  if (ch.alarm) { endBattle(); startBattle(false); return; }
+  if (ch.tele) { endBattle(); renderNow(); arrive('どこかへ飛ばされた……'); return; }
+  BT.mode = 'end'; renderBattleUI();
+}
+
+// ===== dungeon features =====
+// 1 dark zone, 2 spinner, 3 teleporter, 4 pit, 5 elevator
+const FEAT_N = { 2: '回転床', 3: 'テレポーター', 4: '落とし穴', 5: 'エレベーター' };
+function addFeatures(F, seed, lv) {
+  const r = rng((Math.imul(seed, 2654435761) ^ (lv * 7349)) >>> 0), ri = n => (r() * n) | 0;
+  const feat = grid(0), tele = {};
+  const free = (x, y) => F.type[y][x] !== UP && F.type[y][x] !== DOWN && feat[y][x] === 0 && !(lv === 1 && Math.abs(x) + Math.abs(y) < 3);
+  const er = rng((Math.imul(seed, 40503) + 99) >>> 0), elev = {};
+  const EL = [[1, 4, 3 + ((er() * 12) | 0), 2 + ((er() * 15) | 0)], [4, 9, 2 + ((er() * 15) | 0), 3 + ((er() * 12) | 0)]];
+  for (const [a, b, x, y] of EL) {
+    if (lv < a || lv > b || F.type[y][x] === UP || F.type[y][x] === DOWN || feat[y][x]) continue;
+    feat[y][x] = 5; elev[y * SIZE + x] = [a, b];
+  }
+  const place = (k, n) => { for (let i = 0, tries = 0; i < n && tries < 400; tries++) { const x = ri(SIZE), y = ri(SIZE); if (free(x, y)) { feat[y][x] = k; i++; if (k === 3) tele[y * SIZE + x] = [ri(SIZE), ri(SIZE)]; } } };
+  if (lv >= 2) {
+    for (let d = 0; d < Math.floor(lv / 2); d++) { // dark zone blobs
+      const x0 = ri(SIZE), y0 = ri(SIZE), w = 2 + ri(3), h = 2 + ri(3);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const x = mod(x0 + i), y = mod(y0 + j); if (free(x, y)) feat[y][x] = 1; }
+    }
+    place(2, 1 + Math.floor(lv / 3)); place(4, 1 + Math.floor(lv / 2));
+  }
+  if (lv >= 3) place(3, Math.floor(lv / 3));
+  F.feat = feat; F.tele = tele; F.elev = elev;
+}
+const featAt = (lv, x, y) => { const F = getFloor(lv); return F.feat ? F.feat[y][x] : 0; };
+const inDark = () => state.location === 'dungeon' && featAt(state.floor, state.x, state.y) === 1;
+function markFound(k) { const f = state.found || (state.found = {}); const a = f[state.floor] || (f[state.floor] = []); const i = state.y * SIZE + state.x; if (!a.includes(i)) a.push(i); }
+async function stepFeatures() { // returns 'stop' when the step should not trigger an encounter
+  const k = featAt(state.floor, state.x, state.y);
+  if (k === 2) { const nd = rnd(4); state.dir = nd; curAng = nd * Math.PI / 2; renderNow(); updateStatus(); drawMini(); return null; }
+  if (k === 3) {
+    markFound(); const d = getFloor(state.floor).tele[state.y * SIZE + state.x];
+    state.x = d[0]; state.y = d[1]; renderNow(); arrive('ふっと景色が変わった……'); sfx('spell'); return 'stop';
+  }
+  if (k === 4) {
+    markFound(); sfx('hurt'); let t = '落とし穴だ！';
+    for (const c of partyChars().filter(standing)) {
+      if (rnd(25) < c.stats.agi) { continue; }
+      const d = roll(1, 4 + state.floor * 2); c.hp -= d; if (c.hp <= 0) { charDies(c); t += `　${c.name} は死んだ……`; } else t += `　${c.name} に${d}のダメージ。`;
+    }
+    say(t); sortParty(); renderParty(); save();
+    if (!partyChars().some(standing)) { wipe(); return 'stop'; }
+  }
+  return null;
+}
+function elevatorMenu() {
+  const r = getFloor(state.floor).elev[state.y * SIZE + state.x]; actEl.innerHTML = '';
+  for (let f = r[0]; f <= r[1]; f++) {
+    if (f === state.floor) continue;
+    if (r[0] === 4 && f > state.maxFloor) continue; // the deep elevator only to floors already reached
+    addAct(`地下${f}階`, () => { changeFloorTo(f); });
+  }
+  addAct('降りない', () => updateActions());
+  say('エレベーターだ。どの階へ行く？');
+}
+function changeFloorTo(f) {
+  state.floor = f; state.maxFloor = Math.max(state.maxFloor, f); getFloor(f); clearedRooms.clear();
+  renderNow(); arrive(); say(`エレベーターで地下${f}階に着いた。`); sfx('stairs'); playMusic('maze');
+}
+
 // ===== town (Step 2) =====
 const townEl = $('town'), townBody = $('townBody');
 let tview = 'main', tmsg = '', cr = null, detailId = null;
 function goTown(text) {
-  state.location = 'town'; clearedRooms.clear();
+  state.location = 'town'; clearedRooms.clear(); state.light = 0; state.lightX = false; state.pac = 0;
   for (const c of partyChars()) { c.inMaze = false; delete c.loc; c.poison = false; c.sleep = false; }
   save(); showTown('main', text || '城塞都市に戻ってきた。');
 }
@@ -1466,7 +1885,7 @@ function renderTown() {
     h = `<div class="tv">${m}<p class="lead">どこへ行きますか？</p><div class="tlist">
       ${B('go:tavern', 'ギルガメッシュの酒場', 'パーティを組む・外す')}
       ${B('go:inn', '冒険者の宿', '休んで回復・レベルアップ')}
-      ${B('go:shop', 'ボルタック商店', '武器・防具の売り買い（Step 4）')}
+      ${B('go:shop', 'ボルタック商店', '武器・防具の売り買い・鑑定・呪い解き')}
       ${B('go:temple', 'カント寺院', '死者の蘇生・麻痺や石化の治療')}
       ${B('go:edge', '町はずれ', '迷宮の入口・訓練場')}
     </div></div>`;
@@ -1477,7 +1896,8 @@ function renderTown() {
       h += `<div class="mem"><div class="i"><div class="n">${i + 1}. ${esc(c.name)}</div><div class="d">${i < 3 ? '前列' : '後列'}　${ALIGNS[c.align]}・${clsOf(c.cls).n}　Lv${c.level}</div></div>
         <button class="btn" data-t="up:${i}" ${i ? '' : 'disabled style="opacity:.3"'}>▲</button>
         <button class="btn" data-t="dn:${i}" ${i < ps.length - 1 ? '' : 'disabled style="opacity:.3"'}>▼</button>
-        <button class="btn sub" data-t="rm:${c.id}">外す</button></div>`;
+        <button class="btn sub" data-t="rm:${c.id}">外す</button></div>
+        <div style="text-align:right;margin:-4px 0 8px"><button class="btn" style="padding:6px 10px;font-size:.8em" data-t="pool:${c.id}">${esc(c.name)} にお金を集める（${c.gold}G）</button></div>`;
     });
     h += `<div class="tlist" style="margin-top:10px">
       ${ps.length < PARTY_MAX ? B('go:add', '仲間を加える', '訓練場で作ったキャラクターから選ぶ') : ''}
@@ -1502,7 +1922,7 @@ function renderTown() {
     for (const c of pats) h += `<div class="mem"><div class="i"><div class="n">${esc(c.name)}　<small style="color:#ff8a7a">${c.status}</small></div><div class="d">お布施 ${TEMPLE_FEE[c.status] * c.level} G　生命力 ${c.stats.vit}</div></div><button class="btn" data-t="heal:${c.id}">治す</button></div>`;
     h += `<div class="tlist" style="margin-top:9px">${B('go:main', '寺院を出る', '', 'sub')}</div></div>`;
   } else if (tview === 'shop') {
-    h = `<div class="tv">${m}<h2>ボルタック「何をお探しかな？」</h2><p class="lead">武器や防具を買ったり売ったり、アイテムを鑑定したりする場所です。アイテムができるStep 4で使えるようになります。今は職業ごとの標準の武器で戦っています（戦士系は剣、僧侶はメイス、魔術師は杖など）。</p><div class="tlist">${B('go:main', '外に出る')}</div></div>`;
+    h = shopHTML(m);
   } else if (tview === 'edge') {
     h = `<div class="tv">${m}<p class="lead">町はずれ。この先に迷宮の入口がある。</p><div class="tlist">
       ${B('maze', '迷宮に入る', partyChars().length ? `パーティ ${partyChars().length}人で地下1階へ` : 'パーティがいないと入れません', partyChars().length ? 'act' : 'dim')}
@@ -1527,7 +1947,7 @@ function renderTown() {
       <span>AC</span><span>${c.ac}</span><span>年齢</span><span>${c.age}歳</span>
       <span>所持金</span><span>${c.gold} G</span><span>状態</span><span>${c.status}</span>
       ${STATS.map(k => `<span>${STATN[k]}</span><span>${c.stats[k]}</span>`).join('')}
-      </div></div><p class="note">呪文と装備は、Step 4で表示されるようになります。</p>
+      </div></div><p class="note">装備：${(c.items || []).filter(x => x.e).map(itName).join('、') || 'なし'}<br>呪文：${(c.spells || []).join('、') || 'なし'}</p>
       <div class="trow">${B('go:list', '戻る')}${state.party.includes(c.id) || c.inMaze ? '' : B('del:' + c.id, '消す', '', 'sub')}</div></div>`;
   } else if (tview === 'create') h = renderCreate(m);
   townBody.innerHTML = h; townBody.scrollTop = 0;
@@ -1597,6 +2017,7 @@ function makeChar() {
   const c = clsOf(cr.cls), hp = Math.max(2, c.hd - rnd(3) + vitBonus(cr.stats.vit));
   const ch = { id: state.nextId++, name: cr.name, race: cr.race, align: cr.align, cls: cr.cls, level: 1, exp: 0,
     hp, maxhp: hp, ac: 10, age: 14 + rnd(3), ageW: 0, gold: 90 + rnd(100), stats: { ...cr.stats }, status: 'OK', inMaze: false, poison: false, sleep: false };
+  giveStarter(ch); learnSpells(ch, true); refillMP(ch);
   state.roster.push(ch); return ch;
 }
 
@@ -1613,7 +2034,8 @@ function levelUp(c) {
     if (rnd(130) < c.age) { if (c.stats[k] > 3) { c.stats[k]--; ch.push(`${STATN[k]}が下がった`); } }
     else if (c.stats[k] < MAXSTAT) { c.stats[k]++; ch.push(`${STATN[k]}が上がった`); }
   }
-  return `${c.name} はレベル ${c.level} になった！　HPが${gain}増えた。${ch.length ? ch.join('、') + '。' : ''}`;
+  const sp = learnSpells(c); refillMP(c);
+  return `${c.name} はレベル ${c.level} になった！　HPが${gain}増えた。${ch.length ? ch.join('、') + '。' : ''}${sp.length ? `　新しい呪文を覚えた：${sp.join('、')}` : ''}`;
 }
 function stayInn(ri) {
   const [rn, price, heal] = ROOMS[ri], lines = []; let lv = false;
@@ -1626,7 +2048,7 @@ function stayInn(ri) {
       if (!can) { lines.push(`${c.name} はお金が足りない（${price}G 必要）。`); continue; }
       weeks = Math.min(need, can); c.gold -= weeks * price; c.hp = Math.min(c.maxhp, c.hp + weeks * heal);
     }
-    addWeeks(c, weeks);
+    addWeeks(c, weeks); refillMP(c);
     let t = `${c.name} は${rn}に${weeks}週間泊まった。HP ${c.hp}/${c.maxhp}。`;
     if (c.exp >= expNext(c)) { t += '\n' + levelUp(c); lv = true; if (c.exp >= expNext(c)) t += '（まだ上がれる。もう一度泊まると上がる）'; }
     lines.push(t);
@@ -1681,6 +2103,8 @@ function townAct(t) {
   }
   if (k === 'detail') { detailId = +a; return showTown('detail'); }
   if (k === 'inn') return stayInn(+a);
+  if (['shopwho', 'shoptab', 'buy', 'sell', 'idf', 'unc'].includes(k)) return shopAct(k, a);
+  if (k === 'pool') { const to = charById(+a); let sum = 0; for (const c of partyChars()) if (c !== to) { sum += c.gold; c.gold = 0; } to.gold += sum; save(); return showTown('tavern', `全員のお金 ${sum} G を ${to.name} に集めた。（合計 ${to.gold} G）`); }
   if (k === 'heal') return templeHeal(+a);
   if (k === 'del') {
     const c = charById(+a);
@@ -1728,13 +2152,168 @@ townBody.addEventListener('click', e => { const b = e.target.closest('[data-t]')
 townBody.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'crName') townAct('cr:name'); });
 $('townMenu').onclick = () => openMenu();
 
+// ===== equipment actions =====
+function equipToggle(c, inv) {
+  const it = ITEMS[inv.t];
+  if (inv.e) {
+    if (it.cur) return `${itName(inv)} は呪われていて外せない！`;
+    inv.e = false; recalc(c); return `${itName(inv)} を外した。`;
+  }
+  if (it.k === 'X') return 'これは装備するものではない。';
+  if (!canUse(c, it)) return `${c.name} には ${itName(inv)} を装備できない。`;
+  const cur = equipped(c, it.k);
+  if (cur) { if (ITEMS[cur.t].cur) return `${itName(cur)} が呪われていて外せない！`; cur.e = false; }
+  inv.e = true; let t = `${itName(inv)} を装備した。`;
+  if (it.cur) { inv.k = true; t = `${it.n} を装備した……呪われている！　外せなくなった。`; sfx('death'); }
+  recalc(c); return t;
+}
+function bishopIdentify(c, inv) {
+  if (rnd(100) < Math.min(95, 20 + c.level * 6)) { inv.k = true; return `鑑定した。${ITEMS[inv.t].n} だ。`; }
+  return '鑑定に失敗した。';
+}
+
+// ===== camp (in the maze) =====
+const campEl = $('camp'), campBody = $('campBody');
+let cview = 'main', cmsg = [], cid = null, cpend = null, malor = null;
+function openCamp() { if (BT || state.location !== 'dungeon') return; cview = 'main'; cmsg = []; campEl.classList.add('on'); renderCamp(); }
+function closeCamp() { campEl.classList.remove('on'); renderParty(); updateStatus(); }
+function campShow(v, m) { cview = v; if (m != null) cmsg = [].concat(m); renderCamp(); }
+const CB = (k, label, cls, dis) => `<button class="btn ${cls || ''}" data-k="${k}" ${dis ? 'disabled style="opacity:.35"' : ''}>${label}</button>`;
+function renderCamp() {
+  const ps = partyChars(), c = charById(cid);
+  const m = cmsg.length ? `<p class="lead" style="color:#ffe9a8;white-space:pre-line">${esc(cmsg.join('\n'))}</p>` : '';
+  let h = '';
+  if (cview === 'main') {
+    h = `<div class="tv">${m}<p class="lead">キャンプを張った。誰の持ち物や呪文を見ますか？</p>`;
+    for (const x of ps) {
+      const hasSp = (x.spells || []).length;
+      h += `<div class="mem"><div class="i"><div class="n">${esc(x.name)}　<small style="color:#9fb3d9">Lv${x.level} ${clsOf(x.cls).n}</small></div><div class="d">HP ${x.hp}/${x.maxhp}　AC ${x.ac}　${x.status}${x.poison ? '・毒' : ''}　${x.gold}G</div></div>
+        ${CB('char:' + x.id, '持ち物')}${hasSp ? CB('spells:' + x.id, '呪文') : ''}</div>`;
+    }
+    h += `<div class="trow">${CB('menu', '設定', 'sub')}${CB('close', 'キャンプを終える', 'act')}</div></div>`;
+  } else if (cview === 'char') {
+    h = `<div class="tv">${m}<h2>${esc(c.name)} の持ち物（${c.items.length}/8）</h2><p class="lead">HP ${c.hp}/${c.maxhp}　AC ${c.ac}　武器 ${weaponOf(c).n}</p>`;
+    if (!c.items.length) h += '<p class="lead">何も持っていない。</p>';
+    c.items.forEach((inv, i) => {
+      const it = ITEMS[inv.t], usable = it.k === 'X' && it.use && spellByName(it.use).when.includes('C');
+      h += `<div class="mem"><div class="i"><div class="n">${inv.e ? '<span style="color:#ffd400">[装]</span> ' : ''}${esc(itName(inv))}</div><div class="d">${KIND_N[it.k]}${inv.k && it.k !== 'X' ? (it.k === 'W' ? `　${it.d[0]}d${it.d[1]}${it.b ? (it.b > 0 ? '+' : '') + it.b : ''}` : `　AC${it.ac >= 0 ? '-' : '+'}${Math.abs(it.ac)}`) : ''}${!canUse(c, it) && it.k !== 'X' && inv.k ? '　（装備不可）' : ''}</div></div>
+        ${it.k !== 'X' ? CB(`eq:${i}`, inv.e ? '外す' : '装備') : usable ? CB(`use:${i}`, '使う') : ''}${!inv.k && c.cls === 'BIS' ? CB(`idf:${i}`, '鑑定') : ''}${CB(`give:${i}`, '渡す', 'sub')}${CB(`drop:${i}`, '捨てる', 'sub')}</div>`;
+    });
+    h += `<div class="trow">${CB('back', '戻る', 'sub')}</div></div>`;
+  } else if (cview === 'give') {
+    h = `<div class="tv">${m}<p class="lead">誰に渡しますか？</p><div class="tlist">` + ps.filter(x => x !== c).map(x => CB('to:' + x.id, `${esc(x.name)}（${x.items.length}/8）`)).join('') + `${CB('char:' + c.id, 'やめる', 'sub')}</div></div>`;
+  } else if (cview === 'spells') {
+    h = `<div class="tv">${m}<h2>${esc(c.name)} の呪文</h2>`;
+    for (const s of ['M', 'P']) {
+      const known = SPELLS.filter(p => p.s === s && c.spells.includes(p.n)); if (!known.length) continue;
+      h += `<p class="lead" style="margin:6px 0">${s === 'M' ? '魔術師系' : '僧侶系'}　残り回数：${[1, 2, 3, 4, 5, 6, 7].map(L => maxSlots(c, s, L) ? `Lv${L}:${c.mp[s][L - 1]}/${maxSlots(c, s, L)}` : '').filter(Boolean).join('　')}</p>`;
+      for (const p of known) {
+        const ok = p.when.includes('C') && castable(c, p);
+        h += `<div class="mem"><div class="i"><div class="n">${p.n} <small style="color:#9fb3d9">Lv${p.lv}</small></div><div class="d">${p.d}${p.when.includes('C') ? '' : '（戦闘中のみ）'}</div></div>${p.when.includes('C') ? CB('cast:' + p.n, '唱える', '', !ok) : ''}</div>`;
+      }
+    }
+    h += `<div class="trow">${CB('back', '戻る', 'sub')}</div></div>`;
+  } else if (cview === 'ally') {
+    h = `<div class="tv">${m}<p class="lead">誰に？</p><div class="tlist">` + ps.map(x => CB('ally:' + x.id, `${esc(x.name)}（${x.status} HP ${x.hp}/${x.maxhp}${x.poison ? '・毒' : ''}）`)).join('') + `${CB('back', 'やめる', 'sub')}</div></div>`;
+  } else if (cview === 'malor') {
+    const st = (k, lab, v) => `<div class="st"><span>${lab}</span><b>${v}</b>${CB('ml:' + k + ':-1', '－')}${CB('ml:' + k + ':1', '＋')}</div>`;
+    h = `<div class="tv">${m}<h2>マロール（テレポート）</h2><p class="lead">行き先を決めてください。行ったことのある階まで選べます。</p><div class="stbox">
+      ${st('f', '階', 'B' + malor.f)}${st('x', 'X', malor.x)}${st('y', 'Y', malor.y)}</div>
+      <div class="trow">${CB('back', 'やめる', 'sub')}${CB('mlgo', 'テレポート！', 'act')}</div></div>`;
+  }
+  campBody.innerHTML = h; campBody.scrollTop = 0;
+}
+async function campCast(c, p, tgC, inv) {
+  const lines = [], out = async t => { lines.push(t); };
+  const r = await doSpell(c, p, tgC ? { c: tgC } : null, out, false, inv);
+  if (inv) c.items.splice(c.items.indexOf(inv), 1);
+  sortParty(); save();
+  if (r === 'town') return;
+  if (r === 'malor') { malor = { f: state.floor, x: state.x, y: state.y, c }; return campShow('malor', lines); }
+  campShow(inv ? 'char' : 'spells', lines);
+}
+campBody.addEventListener('click', async e => {
+  const b = e.target.closest('[data-k]'); if (!b || b.disabled) return;
+  const [k, a, v] = b.dataset.k.split(':'); const c = charById(cid);
+  if (k === 'close') return closeCamp();
+  if (k === 'menu') return openMenu();
+  if (k === 'back') { cmsg = []; return campShow(cview === 'ally' && cpend && cpend.inv ? 'char' : cview === 'ally' || cview === 'malor' ? 'spells' : 'main'); }
+  if (k === 'char') { cid = +a; return campShow('char', []); }
+  if (k === 'spells') { cid = +a; return campShow('spells', []); }
+  if (k === 'eq') { const t = equipToggle(c, c.items[+a]); save(); return campShow('char', t); }
+  if (k === 'idf') { const t = bishopIdentify(c, c.items[+a]); save(); return campShow('char', t); }
+  if (k === 'drop') { const inv = c.items[+a]; if (inv.e && ITEMS[inv.t].cur) return campShow('char', '呪われていて手放せない！'); return ask(`${itName(inv)} を捨てますか？`, () => { c.items.splice(+a, 1); recalc(c); save(); campShow('char', '捨てた。'); }); }
+  if (k === 'give') { const inv = c.items[+a]; if (inv.e && ITEMS[inv.t].cur) return campShow('char', '呪われていて手放せない！'); cpend = { inv }; return campShow('give', []); }
+  if (k === 'to') { const to = charById(+a); if (to.items.length >= 8) return campShow('char', `${to.name} はもう持てない。`); const inv = cpend.inv; c.items.splice(c.items.indexOf(inv), 1); inv.e = false; to.items.push(inv); recalc(c); save(); return campShow('char', `${itName(inv)} を ${to.name} に渡した。`); }
+  if (k === 'use') { const inv = c.items[+a], p = spellByName(ITEMS[inv.t].use); if (c.status !== 'OK') return campShow('char', '動けない。'); cpend = { p, inv }; if (p.tg === 'ally') return campShow('ally', []); return campCast(c, p, null, inv); }
+  if (k === 'cast') { const p = spellByName(a); cpend = { p }; if (p.tg === 'ally') return campShow('ally', []); return campCast(c, p, null, null); }
+  if (k === 'ally') return campCast(c, cpend.p, charById(+a), cpend.inv || null);
+  if (k === 'ml') {
+    const d = +v; if (a === 'f') malor.f = Math.max(1, Math.min(state.maxFloor, malor.f + d)); else malor[a] = mod(malor[a] + d);
+    return renderCamp();
+  }
+  if (k === 'mlgo') {
+    state.x = malor.x; state.y = malor.y; closeCamp();
+    if (malor.f !== state.floor) changeFloorTo(malor.f); else { renderNow(); arrive(); }
+    say(`テレポートした。地下${state.floor}階 X:${state.x} Y:${state.y}`); return;
+  }
+});
+$('campClose').onclick = () => closeCamp();
+
+// ===== shop (Boltac) =====
+let shopTab = 'buy', shopWho = null;
+function shopHTML(m) {
+  const ps = partyChars();
+  if (!shopWho || !charById(shopWho)) {
+    let h = `<div class="tv">${m}<h2>ボルタック「何をお探しかな？」</h2><p class="lead">誰が店に入りますか？（お金はその人の所持金から払います。酒場の「お金を集める」で1人にまとめられます）</p><div class="tlist">`;
+    h += ps.map(c => B('shopwho:' + c.id, `${esc(c.name)}（${c.gold} G）`, `${clsOf(c.cls).n}　持ち物 ${c.items.length}/8`)).join('');
+    if (!ps.length) h += '<p class="lead">パーティがいません。</p>';
+    return h + B('go:main', '店を出る', '', 'sub') + '</div></div>';
+  }
+  const c = charById(shopWho);
+  let h = `<div class="tv">${m}<h2>${esc(c.name)}　所持金 ${c.gold} G　持ち物 ${c.items.length}/8</h2>
+    <div class="seg" style="margin:6px 0 10px">${[['buy', '買う'], ['sell', '売る'], ['idf', '鑑定'], ['unc', '呪い解き']].map(([k, n]) => `<button class="btn ${shopTab === k ? 'on' : ''}" data-t="shoptab:${k}">${n}</button>`).join('')}</div>`;
+  if (shopTab === 'buy') {
+    const list = ITEMS.filter(it => isBase(it) || (state.shop && state.shop[it.i] > 0));
+    for (const it of list) h += `<div class="mem"><div class="i"><div class="n">${it.n}</div><div class="d">${it.p} G　${KIND_N[it.k]}${it.k === 'W' ? `　${it.d[0]}d${it.d[1]}${it.b ? '+' + it.b : ''}` : it.ac ? `　AC-${it.ac}` : ''}${isBase(it) ? '' : `　在庫${state.shop[it.i]}`}${canUse(c, it) ? '' : '　<span style="color:#ff8a7a">装備不可</span>'}</div></div>${B('buy:' + it.i, '買う')}</div>`;
+  } else {
+    const list = c.items.map((inv, i) => ({ inv, i })).filter(({ inv }) => shopTab === 'sell' ? true : shopTab === 'idf' ? !inv.k : inv.e && ITEMS[inv.t].cur);
+    if (!list.length) h += `<p class="lead">${{ sell: '売れる物を持っていない。', idf: '鑑定が必要な物はない。', unc: '呪われた装備はない。' }[shopTab]}</p>`;
+    for (const { inv, i } of list) {
+      const it = ITEMS[inv.t], price = shopTab === 'sell' ? Math.max(1, Math.floor(it.p / 2)) : Math.max(1, Math.floor(it.p / 2));
+      h += `<div class="mem"><div class="i"><div class="n">${inv.e ? '[装] ' : ''}${esc(itName(inv))}</div><div class="d">${shopTab === 'sell' ? '売値' : '料金'} ${price} G</div></div>${B(`${shopTab}:${i}`, { sell: '売る', idf: '鑑定', unc: '解く' }[shopTab])}</div>`;
+    }
+  }
+  return h + `<div class="trow">${B('shopwho:0', '他の人にする', '', 'sub')}${B('go:main', '店を出る', '', 'sub')}</div></div>`;
+}
+function shopAct(k, a) {
+  const c = charById(shopWho);
+  if (k === 'shopwho') { shopWho = +a || null; shopTab = 'buy'; return showTown('shop'); }
+  if (k === 'shoptab') { shopTab = a; return showTown('shop'); }
+  if (k === 'buy') {
+    const it = ITEMS[+a];
+    if (c.gold < it.p) return showTown('shop', 'お金が足りないようだね。');
+    if (c.items.length >= 8) return showTown('shop', 'もう持てないようだね。');
+    c.gold -= it.p; c.items.push({ t: it.i, k: true, e: false }); if (!isBase(it)) state.shop[it.i]--; save(); sfx('gold');
+    return showTown('shop', `${it.n} を買った。毎度あり！${canUse(c, it) ? '' : '（ただし、この人には装備できない）'}`);
+  }
+  const inv = c.items[+a], it = inv && ITEMS[inv.t], price = it ? Math.max(1, Math.floor(it.p / 2)) : 0;
+  if (k === 'sell') {
+    if (inv.e && it.cur) return showTown('shop', '呪われた装備は、先に呪いを解かないと売れないよ。');
+    c.items.splice(+a, 1); c.gold += price; if (!isBase(it)) { state.shop = state.shop || {}; state.shop[it.i] = (state.shop[it.i] || 0) + 1; }
+    recalc(c); save(); sfx('gold'); return showTown('shop', `${itName(inv)} を ${price} G で売った。`);
+  }
+  if (k === 'idf') { if (c.gold < price) return showTown('shop', 'お金が足りないようだね。'); c.gold -= price; inv.k = true; save(); return showTown('shop', `鑑定したよ。それは ${it.n} だ。`); }
+  if (k === 'unc') { if (c.gold < price) return showTown('shop', 'お金が足りないようだね。'); c.gold -= price; c.items.splice(+a, 1); recalc(c); save(); return showTown('shop', `呪いを解いた。${it.n} は消えてしまったよ。`); }
+}
+
 // ===== menu =====
 const menuScreen = $('menuScreen');
 function setSeg(id, val) { for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === String(val)); }
 function refreshMenu() {
   $('seedNow').textContent = state.seed;
   setSeg('segMap', settings.showAll ? 1 : 0); setSeg('segFs', settings.fs);
-  setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0); setSeg('segBgm', settings.bgm ? 1 : 0);
+  setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0); setSeg('segBgm', settings.bgm ? 1 : 0); setSeg('segDark', settings.darkPos ? 1 : 0);
   $('volBgm').value = settings.bgmVol; $('volSe').value = settings.seVol; $('verNow').textContent = APP_VERSION;
 }
 function applySettings() { document.documentElement.style.setProperty('--fs', [14, 17, 21][settings.fs] + 'px'); }
@@ -1744,6 +2323,7 @@ function bindSeg(id, fn) { for (const b of $(id).children) b.onclick = () => { f
 bindSeg('segMap', v => settings.showAll = !!v);
 bindSeg('segFs', v => settings.fs = v);
 bindSeg('segAnim', v => settings.anim = !!v);
+bindSeg('segDark', v => { settings.darkPos = !!v; drawMini(); updateStatus(); });
 bindSeg('segSnd', v => { settings.sound = !!v; sndInit(); sndVolumes(); sfx('heal'); });
 bindSeg('segBgm', v => { settings.bgm = !!v; sndInit(); sndVolumes(); if (v) playMusic(curMusic()); else stopMusic(); });
 $('volBgm').oninput = e => { settings.bgmVol = +e.target.value; sndVolumes(); save(); };
@@ -1829,7 +2409,8 @@ vw.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 document.addEventListener('keydown', e => {
   if (townEl.classList.contains('on') && !menuScreen.classList.contains('on')) return;
   if (mapScreen.classList.contains('on') || menuScreen.classList.contains('on')) { if (e.key === 'Escape') { mapScreen.classList.remove('on'); menuScreen.classList.remove('on'); } return; }
-  const k = { ArrowUp: 'fwd', w: 'fwd', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'back', s: 'back', m: 'map' }[e.key];
+  if (campEl.classList.contains('on')) return;
+  const k = { ArrowUp: 'fwd', w: 'fwd', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'back', s: 'back', m: 'map', c: 'camp' }[e.key];
   if (k) { e.preventDefault(); act(k); }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
@@ -1837,7 +2418,7 @@ window.addEventListener('resize', () => drawMini());
 
 // ===== boot =====
 $('ver').textContent = APP_VERSION; $('ver3').textContent = APP_VERSION;
-$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 3）　`;
+$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 4）　`;
 if (load()) {
   applySettings(); curAng = state.dir * Math.PI / 2; getFloor(state.floor); renderNow();
   if (state.location === 'dungeon' && partyChars().length) { arrive(); say(`続きから再開した。地下${state.floor}階。`); }
@@ -1850,7 +2431,7 @@ if (load()) {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
-window.__meikyu = { startBattle, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
+window.__meikyu = { ITEMS, SPELLS, openCamp, doSpell, changeFloorTo, featAt, startBattle, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
 })();
 </script>
 </body>
