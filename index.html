@@ -99,6 +99,10 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 .bonus{font-size:1.05em;margin:10px 0 6px}
 .bonus b{color:#ffd400;font-size:1.3em}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.nseg{margin-top:10px;flex-wrap:wrap}
+.nseg .btn{padding:8px 4px;font-size:.82em;min-width:22%}
+.nchips{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:10px}
+.nchips .btn{padding:10px 2px;font-size:.92em;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip{padding:3px 9px;border-radius:999px;font-size:.82em;border:1px solid #3b4a6b;color:#7f8aa3}
 .chip.ok{border-color:#ffd400;color:#ffe680}
 .kv{display:grid;grid-template-columns:6em 1fr;gap:4px 10px;font-size:.95em}
@@ -186,6 +190,11 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
       <div style="margin-top:8px">音量 <input type="range" id="volSe" min="0" max="1" step="0.05" style="width:60%;vertical-align:middle"></div>
       <div class="note">iPhoneのマナーモード（横のスイッチ）がオンだと鳴りません。</div>
     </div>
+    <div class="row"><h3>アプリの更新</h3>
+      <div>今の版：<b id="verNow"></b>　<span id="updInfo" class="note"></span></div>
+      <button class="btn" id="updBtn">最新版に更新</button>
+      <div class="note">新しい版を公開したあと、ここを押すと確実に新しくなります。セーブデータは消えません。電波のある所で押してください。</div>
+    </div>
     <div class="row"><h3>セーブデータ</h3>
       <div class="note" style="margin-top:0">1歩ごとに自動で保存しています。念のため、ファイルに書き出しておけます（機種変更のときにも使えます）。</div>
       <button class="btn" id="exp">書き出す</button>
@@ -213,7 +222,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v0.4';
+const APP_VERSION = 'v0.5';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -1527,8 +1536,11 @@ function renderTown() {
 // --- character creation wizard ---
 function renderCreate(m) {
   const step = cr.step;
-  if (step === 'name') return `<div class="tv">${m}<h2>名前</h2><p class="lead">新しいキャラクターの名前を入れてください（15文字まで）。</p>
+  if (step === 'name') return `<div class="tv">${m}<h2>名前</h2><p class="lead">候補から選ぶか、自分で入れてください（15文字まで）。</p>
     <input class="name" id="crName" maxlength="15" value="${esc(cr.name || '')}" autocomplete="off"><div class="err" id="crErr"></div>
+    <div class="seg nseg">${Object.keys(NAME_SETS).map(k => `<button class="btn ${k === nameCat ? 'on' : ''}" data-t="nm:cat:${k}">${k}</button>`).join('')}</div>
+    <div class="nchips">${nameChoices().map(n => `<button class="btn" data-t="nm:pick:${n}">${n}</button>`).join('')}</div>
+    <div class="trow">${B('nm:more', '他の候補', '', 'sub')}${B('nm:rand', 'おまかせ', '', 'sub')}</div>
     <div class="trow">${B('go:train', 'やめる', '', 'sub')}${B('cr:name', '次へ', '', 'act')}</div></div>`;
   if (step === 'race') return `<div class="tv">${m}<h2>種族</h2><p class="lead">${esc(cr.name)} の種族を選んでください。</p><div class="tlist">
     ${RACES.map(r => B('cr:race:' + r.id, r.n, STATS.map(k => `${STATN[k]}${r.b[k]}`).join('　'))).join('')}
@@ -1562,6 +1574,21 @@ function renderCreate(m) {
       <div class="trow">${B('cr:back:cls', 'いいえ', '', 'sub')}${B('cr:save', 'はい', '', 'act')}</div></div>`;
   }
   return '';
+}
+// --- name suggestions (original names, sorted by mood) ---
+const NAME_SETS = {
+  '勇ましい': 'アルフレド ガイウス ギルベルト ブランド ラグナ ボリス シグルド ドラン ヴァレン グラム ハロルド ウォルター ガロ レオン バルド ロラン ドミニク イヴァン オーウェン セドリック ヘルガ グレタ ブリギット ヴァルダ カミラ',
+  '知的・神秘': 'エルウィン セレス ルシアン ゼノ ユリアン オズワルド マティアス サイラス エミール ノエル フィオナ イリス ディアナ リディア ミレイユ ベアトリス ロザリンド エレイン モルガン オリヴィア タリア アデル ソフィア ヴィクトル ラファエル',
+  '和風': 'ハヤテ カゲロウ コジロウ シノブ サクヤ ツバキ ゲンジ ライデン カスミ ヤマト クロウ イズナ ヒエン シグレ アヤメ トキワ ムラクモ スズラン ゲッカ ホムラ ミカゲ ヨイチ オボロ サギリ',
+  '小柄・愉快': 'ピップ モモ トット ポルカ チコ ビビ ルル コロ ペペ ニコ ミミ タック ボビン フロル ポム ククル ピコ ノノ ララ トム ドングリ マフィン キャラメル ビスケ ポテト'
+};
+let nameCat = '勇ましい', nameShuf = 0;
+function nameChoices() {
+  const used = new Set(state.roster.map(c => c.name));
+  const all = NAME_SETS[nameCat].split(' ').filter(n => !used.has(n));
+  const r = rng(nameShuf * 7919 + 17), a = all.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, 12);
 }
 function rerollStats() {
   const r = raceOf(cr.race); cr.stats = { ...r.b }; cr.total = rollBonus(); cr.bonus = cr.total;
@@ -1661,6 +1688,16 @@ function townAct(t) {
       state.roster = state.roster.filter(x => x.id !== +a); save(); showTown('list', `${c.name} を消した。`);
     });
   }
+  if (k === 'nm') {
+    const keep = $('crName') ? $('crName').value : '';
+    if (a === 'cat') { nameCat = b; nameShuf = 0; cr.name = keep; return showTown('create'); }
+    if (a === 'more') { nameShuf++; cr.name = keep; return showTown('create'); }
+    if (a === 'pick') { cr.name = b; $('crName').value = b; $('crErr').textContent = ''; return; }
+    if (a === 'rand') {
+      const used = new Set(state.roster.map(c => c.name)), all = Object.values(NAME_SETS).join(' ').split(' ').filter(n => !used.has(n));
+      const n = all[rnd(all.length)] || ''; cr.name = n; $('crName').value = n; return;
+    }
+  }
   if (k === 'newchar') {
     if (state.roster.length >= ROSTER_MAX) return showTown('train', `登録できるのは${ROSTER_MAX}人までです。`);
     cr = { step: 'name', name: '' }; return showTown('create');
@@ -1698,7 +1735,7 @@ function refreshMenu() {
   $('seedNow').textContent = state.seed;
   setSeg('segMap', settings.showAll ? 1 : 0); setSeg('segFs', settings.fs);
   setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0); setSeg('segBgm', settings.bgm ? 1 : 0);
-  $('volBgm').value = settings.bgmVol; $('volSe').value = settings.seVol;
+  $('volBgm').value = settings.bgmVol; $('volSe').value = settings.seVol; $('verNow').textContent = APP_VERSION;
 }
 function applySettings() { document.documentElement.style.setProperty('--fs', [14, 17, 21][settings.fs] + 'px'); }
 function openMenu() { refreshMenu(); menuScreen.classList.add('on'); }
@@ -1751,6 +1788,32 @@ $('impFile').onchange = e => {
   };
   rd.readAsText(f); e.target.value = '';
 };
+
+// ===== app update (fetch the newest page, clear caches, reload) =====
+async function latestVersion() {
+  const r = await fetch('index.html?ts=' + Date.now(), { cache: 'no-store' });
+  const t = await r.text(), m = /APP_VERSION = '(v[0-9.]+)'/.exec(t);
+  return m ? m[1] : null;
+}
+async function hardUpdate() {
+  save();
+  try { if ('serviceWorker' in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch (e) { }
+  try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch (e) { }
+  location.replace(location.pathname + '?v=' + Date.now());
+}
+$('updBtn').onclick = async () => {
+  $('updInfo').textContent = '確認中…';
+  try {
+    const v = await latestVersion();
+    if (!v) throw 0;
+    if (v === APP_VERSION) { $('updInfo').textContent = 'これが最新版です。'; return; }
+    $('updInfo').textContent = `${v} に更新します…`; hardUpdate();
+  } catch (e) { $('updInfo').textContent = '確認できませんでした（電波のある所で試してください）。'; }
+};
+setTimeout(async () => { // quiet check at start-up
+  if (!navigator.onLine || location.protocol !== 'https:') return;
+  try { const v = await latestVersion(); if (v && v !== APP_VERSION) ask(`新しい版（${v}）があります。今すぐ更新しますか？\nセーブデータは消えません。`, hardUpdate); } catch (e) { }
+}, 2500);
 
 // ===== input =====
 for (const b of document.querySelectorAll('#pad .btn')) b.addEventListener('click', () => act(b.dataset.a));

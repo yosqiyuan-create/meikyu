@@ -1,5 +1,5 @@
 // Offline cache for Meikyu (Step 1). Bump VERSION whenever files change.
-const VERSION = 'meikyu-v0.4.0';
+const VERSION = 'meikyu-v0.5.0';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -12,7 +12,7 @@ self.addEventListener('fetch', e => {
   // Network first for the page itself (to pick up updates when online), cache first for everything else.
   const isPage = e.request.mode === 'navigate';
   if (isPage) {
-    e.respondWith(fetch(e.request).then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put('./index.html', cp)); return r; })
+    e.respondWith(fetch(e.request.url, { cache: 'no-store' }).then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put('./index.html', cp)); return r; })
       .catch(() => caches.match('./index.html')));
     return;
   }
