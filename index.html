@@ -76,7 +76,17 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 .hpbad{color:#ff8a7a}
 #town{background:#05070c;z-index:8}
 #menuScreen,#mapScreen,#camp{background:#03050c}
+#titleScreen{z-index:40;background:radial-gradient(circle at 50% 38%,#1b2a55 0%,#05070c 70%);align-items:center;justify-content:center;cursor:pointer}
+#titleScreen .tin{text-align:center;padding:20px}
+#titleScreen .ticon{width:46vw;max-width:220px;border-radius:22%;box-shadow:0 0 40px rgba(255,200,80,.35);image-rendering:pixelated}
+#titleScreen .tname{font-size:2.4em;font-weight:bold;color:#ffd77a;letter-spacing:.12em;margin-top:22px;text-shadow:0 2px 10px #000}
+#titleScreen .tby{color:#c9a227;font-style:italic;margin-top:4px}
+#titleScreen .tver{color:#8fa3c9;font-size:.85em;margin-top:2px}
+#titleScreen .ttap{margin-top:38px;font-size:1.15em;color:#fff;animation:blink 1.4s infinite}
+#titleScreen .tnote{margin-top:26px;font-size:.75em;color:#7f8aa3;line-height:1.5}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 #camp{z-index:9}
+#ending{z-index:35;background:radial-gradient(circle at 50% 30%,#3a2a10 0%,#05070c 75%)}
 #menuScreen{z-index:11}
 #townTitle{padding:5px 10px 4px;text-align:center;font-size:.82em;color:#e8d9a8;border-bottom:1px solid #2a2f3d}
 #townTitle .by{color:#c9a227;font-style:italic}
@@ -118,6 +128,16 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
 </style>
 </head>
 <body>
+<div class="screen on" id="titleScreen">
+  <div class="tin">
+    <img src="icon-512.png" alt="" class="ticon">
+    <div class="tname">迷宮探索</div>
+    <div class="tby">by Urushihara</div>
+    <div class="tver" id="tver"></div>
+    <div class="ttap">タッチしてはじめる</div>
+    <div class="tnote">音が出ないときは、iPhoneのマナーモード（横のスイッチ）を確認してください。</div>
+  </div>
+</div>
 <div id="app">
   <div id="title"><b>迷宮探索</b> <span class="by">by Urushihara</span> <span class="ver" id="ver"></span></div>
   <div id="status"><span id="pos">B1</span><span class="sub" id="theme"></span></div>
@@ -165,6 +185,14 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
   <div id="townParty"></div>
 </div>
 
+<div class="screen" id="ending">
+  <div style="flex:1;overflow:auto;padding:28px 20px;text-align:center">
+    <div style="font-size:1.6em;font-weight:bold;color:#ffd77a;letter-spacing:.1em;margin:10px 0 18px">迷宮踏破</div>
+    <div id="endText" style="white-space:pre-line;line-height:1.9;color:#e8e2cc"></div>
+    <div style="margin-top:28px;color:#c9a227;font-style:italic">迷宮探索 by Urushihara</div>
+    <button class="btn act" id="endBtn" style="margin-top:24px;padding:14px 22px">城塞都市に戻る</button>
+  </div>
+</div>
 <div class="screen" id="camp">
   <div class="bar"><div class="t">キャンプ</div><button class="btn sub" id="campClose">終える</button></div>
   <div id="campBody" style="flex:1;overflow:auto;padding:12px"></div>
@@ -233,7 +261,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v0.6';
+const APP_VERSION = 'v1.0';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -365,7 +393,11 @@ function tryGen(seed, lv, up, att) {
     const [dx, dy] = cand[ri(cand.length)];
     down = { x: dx, y: dy }; type[dy][dx] = DOWN;
   }
-  return { ns, ew, type, up, down, roomId, steps: down ? dist[down.y][down.x] : 0 };
+  let boss = null;
+  if (lv === FLOORS) { // the lair of the boss: the farthest corridor cell from the stairs
+    let best = -1; for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (type[y][x] === CORR && dist[y][x] > best) { best = dist[y][x]; boss = { x, y }; }
+  }
+  return { ns, ew, type, up, down, roomId, boss, steps: down ? dist[down.y][down.x] : 0 };
 }
 
 function genFloor(seed, lv, up) {
@@ -519,7 +551,7 @@ function render(px, py, ang) {
 }
 
 // ===== state & save =====
-let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: false, bgmVol: 0.6, seVol: 0.7, darkPos: false };
+let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: true, bgmVol: 0.6, seVol: 0.7, darkPos: false, bgmOn7: true };
 function newState(seed) {
   return { v: 2, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {}, roster: [], party: [], nextId: 1, location: 'town' };
 }
@@ -584,7 +616,7 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     const st = s && migrate(s.state);
-    if (st) { state = st; Object.assign(settings, s.settings || {}); return true; }
+    if (st) { state = st; Object.assign(settings, s.settings || {}); if (!settings.bgmOn7) { settings.bgm = true; settings.bgmOn7 = true; } return true; }
   } catch (e) { }
   return false;
 }
@@ -650,7 +682,7 @@ function partyTable(compact) {
   let h = '<table class="ptable"><tr><th>#</th><th>名前</th><th>職業</th><th class="num">AC</th><th class="num">HP</th><th>状態</th></tr>';
   ps.forEach((c, i) => {
     const cl = clsOf(c.cls), low = c.hp < c.maxhp / 3;
-    h += `<tr class="${i >= 3 ? 'back' : ''}${i === 3 ? ' sep' : ''}"><td>${i + 1}</td><td class="nm">${esc(c.name)}</td><td>${c.align}-${compact ? cl.s : cl.n}</td><td class="num">${c.ac}</td><td class="num ${low ? 'hpbad' : ''}">${c.hp}/${c.maxhp}</td><td class="${c.status !== 'OK' || c.poison ? 'hpbad' : ''}">${c.status === 'OK' ? (c.sleep ? '睡眠' : c.poison ? '毒' : 'OK') : c.status}</td></tr>`;
+    h += `<tr class="${i >= 3 ? 'back' : ''}${i === 3 ? ' sep' : ''}"><td>${i + 1}</td><td class="nm">${c.honor ? '&gt;' : ''}${esc(c.name)}</td><td>${c.align}-${compact ? cl.s : cl.n}</td><td class="num">${c.ac}</td><td class="num ${low ? 'hpbad' : ''}">${c.hp}/${c.maxhp}</td><td class="${c.status !== 'OK' || c.poison ? 'hpbad' : ''}">${c.status === 'OK' ? (c.sleep ? '睡眠' : c.poison ? '毒' : 'OK') : c.status}</td></tr>`;
   });
   return h + '</table>';
 }
@@ -661,6 +693,7 @@ function arrive(text) {
   if (bodiesHere().length) say(`${bodiesHere().map(c => c.name).join('、')} が倒れている……`);
   else if (t === DOWN) { say('下り階段がある。'); }
   else if (featAt(state.floor, state.x, state.y) === 5) say('エレベーターがある。');
+  else if (state.floor === FLOORS && !state.bossDead) { const b = getFloor(FLOORS).boss; if (b && Math.abs(b.x - state.x) + Math.abs(b.y - state.y) <= 2) say('ただならぬ気配がする……'); }
   else if (t === UP) say(state.floor === 1 ? '上り階段がある。地上の街に続いている。' : '上り階段がある。');
   else say(text || '');
 }
@@ -903,9 +936,12 @@ const SONGS = {
     A#2 A#2 A#3 A#2 G2 G2 G3 G2 F2 F2 F3 F2 C3 C3 C4 C3 A#2 A#2 A#3 A#2 G2 G2 G3 G2 A2 A2 A3 A2 A2 A2 A3 A2
     D3 D3 D4 D3 F3 F3 F4 F3 G3 G3 G4 G3 A#2 A#2 A#3 A#2 A2 A2 A3 A2 A2 A2 A3 A2 D3 D3 D4 D3 D3 . . .`) }
 };
+SONGS.boss = Object.assign({}, SONGS.battle, { bpm: 172, lead: 'sawtooth', v: [0.4, 0.4] });
+SONGS.ending = Object.assign({}, SONGS.town, { bpm: 88, lead: 'triangle', v: [0.9, 0.8] });
 function playMusic(name) {
   if (!settings.bgm) { stopMusic(); SND.want = name; return; }
   SND.want = name;
+  if (document.getElementById('titleScreen').classList.contains('on')) return; // wait for the first touch
   if (!sndInit()) return;
   if (SND.cur === name) return;
   stopMusic(); SND.cur = name; SND.step = 0; SND.nextT = SND.ctx.currentTime + 0.08;
@@ -1097,6 +1133,7 @@ const MONSTERS = MON_SRC.trim().split('\n').map((l, i) => {
     res: Math.min(90, tier * 7 + (ty === 'DEM' ? 20 : 0))
   };
 });
+const BOSS = { i: 100, n: '狂王の大魔導師', tier: 10, ty: 'MAG', fl: 'MH', u: 'ローブ姿の老人', lv: 20, hpN: 36, hd: 8, ac: -8, att: 1, dn: 4, dd: 10, exp: 60000, grp: 1, res: 55 };
 function pickMonster(floor) {
   const lo = Math.max(1, floor - 1), hi = Math.min(10, floor + (Math.random() < 0.12 ? 1 : 0));
   const pool = MONSTERS.filter(m => m.tier >= lo && m.tier <= hi);
@@ -1377,7 +1414,7 @@ async function charAction(cm) {
     let tg = cm.g != null ? { g: cm.g } : cm.ally ? { c: cm.ally } : null;
     if (tg && tg.g != null && !liveMons(BT.groups[tg.g]).length) { const gi = BT.groups.findIndex(g => liveMons(g).length); if (gi < 0) return; tg = { g: gi }; }
     const r = await doSpell(c, cm.p, tg, show, true, cm.a === 'item' ? cm.inv : null);
-    if (cm.a === 'item') c.items.splice(c.items.indexOf(cm.inv), 1);
+    if (cm.a === 'item' && !ITEMS[cm.inv.t].keep) c.items.splice(c.items.indexOf(cm.inv), 1);
     if (r === 'escape' && BT) BT.escaped = true;
     return;
   }
@@ -1479,6 +1516,14 @@ async function victory() {
   if (ready.length) t += `　${ready.join('、')} はレベルが上がる準備ができた（宿で休むと上がる）。`;
   if (BT.room) clearedRooms.add(state.floor + ':' + BT.roomId);
   say(t); sortParty(); renderParty(); save();
+  if (BT.boss) {
+    state.bossDead = true; jingle('level');
+    const who = partyChars().find(c => c.items.length < 8) || partyChars()[0];
+    if (who.items.length >= 8) who.items.pop();
+    who.items.push({ t: itemByName('魔除けの護符').i, k: true, e: false });
+    say(`狂王の大魔導師を倒した！　${who.name} は「魔除けの護符」を手に入れた。城塞都市へ持ち帰ろう！`);
+    BT.mode = 'end'; renderBattleUI(); save(); return;
+  }
   if (BT.room && partyChars().some(standing)) { BT.chest = makeChest(); BT.mode = 'chest'; } else BT.mode = 'end';
   renderBattleUI();
 }
@@ -1501,8 +1546,20 @@ function finishBattleView() { endBattle(true); say(''); arrive(); }
 
 // ===== encounters while walking =====
 const clearedRooms = new Set();
+function startBoss() {
+  const mk = (m, n) => ({ m, known: m === BOSS, mons: Array.from({ length: n }, () => { const hp = Math.max(1, roll(m.hpN, m.hd)); return { hp, max: hp, sleep: false }; }) });
+  const guards = MONSTERS.filter(m => m.tier >= 9);
+  const g1 = guards[rnd(guards.length)], g2 = guards[rnd(guards.length)];
+  BT = { groups: [mk(BOSS, 1), mk(g1, 1 + rnd(2)), mk(g2, 1 + rnd(3))], room: true, boss: true, surprise: null, friendly: false, round: 0, cmds: [], ci: 0, mode: 'cmd', exp: 0, busy: false, roomId: -9 };
+  for (const c of partyChars()) c.sleep = false;
+  padEl.style.display = 'none'; battleEl.style.display = 'flex'; actEl.innerHTML = '';
+  SND.cur = null; playMusic('boss'); sfx('encounter');
+  say('「よくぞここまで来た、愚かな冒険者どもよ……」　狂王の大魔導師が立ちはだかった！');
+  drawBattle(); beginCommands();
+}
 function checkEncounter() {
   const F = getFloor(state.floor), rid = F.roomId ? F.roomId[state.y][state.x] : -1;
+  if (F.boss && F.boss.x === state.x && F.boss.y === state.y && !state.bossDead) { startBoss(); return true; }
   if (rid >= 0 && !clearedRooms.has(state.floor + ':' + rid)) {
     clearedRooms.add(state.floor + ':' + rid);
     if (rnd(100) < 75) { startBattle(true); BT.roomId = rid; return true; }
@@ -1556,7 +1613,8 @@ const ITEMS = [
   IT('ディオスの薬', 'X', 100, '*', { use: 'ディオス', t: 1 }), IT('ラツモフィスの薬', 'X', 300, '*', { use: 'ラツモフィス', t: 1 }),
   IT('ディアルの薬', 'X', 800, '*', { use: 'ディアル', t: 3 }), IT('ハリトの巻物', 'X', 500, '*', { use: 'ハリト', t: 1 }),
   IT('カティノの巻物', 'X', 500, '*', { use: 'カティノ', t: 1 }), IT('バディオスの巻物', 'X', 500, '*', { use: 'バディオス', t: 2 }),
-  IT('マハリトの巻物', 'X', 3000, '*', { use: 'マハリト', t: 4 })
+  IT('マハリトの巻物', 'X', 3000, '*', { use: 'マハリト', t: 4 }),
+  IT('魔除けの護符', 'X', 0, '*', { use: 'マロール', t: 99, keep: 1 })
 ];
 ITEMS.forEach((it, i) => it.i = i);
 const itemByName = n => ITEMS.find(x => x.n === n);
@@ -1802,7 +1860,7 @@ const FEAT_N = { 2: '回転床', 3: 'テレポーター', 4: '落とし穴', 5: 
 function addFeatures(F, seed, lv) {
   const r = rng((Math.imul(seed, 2654435761) ^ (lv * 7349)) >>> 0), ri = n => (r() * n) | 0;
   const feat = grid(0), tele = {};
-  const free = (x, y) => F.type[y][x] !== UP && F.type[y][x] !== DOWN && feat[y][x] === 0 && !(lv === 1 && Math.abs(x) + Math.abs(y) < 3);
+  const free = (x, y) => F.type[y][x] !== UP && F.type[y][x] !== DOWN && feat[y][x] === 0 && !(lv === 1 && Math.abs(x) + Math.abs(y) < 3) && !(F.boss && F.boss.x === x && F.boss.y === y);
   const er = rng((Math.imul(seed, 40503) + 99) >>> 0), elev = {};
   const EL = [[1, 4, 3 + ((er() * 12) | 0), 2 + ((er() * 15) | 0)], [4, 9, 2 + ((er() * 15) | 0), 3 + ((er() * 12) | 0)]];
   for (const [a, b, x, y] of EL) {
@@ -1859,10 +1917,31 @@ function changeFloorTo(f) {
 // ===== town (Step 2) =====
 const townEl = $('town'), townBody = $('townBody');
 let tview = 'main', tmsg = '', cr = null, detailId = null;
+function hasAmulet() { return partyChars().some(c => c.items.some(x => ITEMS[x.t].n === '魔除けの護符')); }
+function showEnding() {
+  for (const c of partyChars()) if (c.status !== 'ロスト') c.honor = true;
+  state.cleared = true; save();
+  const names = partyChars().map(c => `${c.name}（${clsOf(c.cls).n} Lv${c.level}）`).join('\n');
+  $('endText').textContent = `ついに、狂王の大魔導師は倒れた。
+
+迷宮の奥深くから持ち帰られた「魔除けの護符」を手にした王は、
+冒険者たちの勇気をたたえ、
+その名を城塞都市の記録に永く刻んだ。
+
+${names}
+
+（パーティの名前の前に「>」の印が付いた）
+
+しかし、迷宮は今もそこにある。
+新たな挑戦者を待ちながら……`;
+  $('ending').classList.add('on'); SND.cur = null; playMusic('ending'); jingle('level');
+}
+$('endBtn').onclick = () => { $('ending').classList.remove('on'); showTown('main', '王から褒美を賜った。迷宮はこれからも探索できる。'); };
 function goTown(text) {
   state.location = 'town'; clearedRooms.clear(); state.light = 0; state.lightX = false; state.pac = 0;
   for (const c of partyChars()) { c.inMaze = false; delete c.loc; c.poison = false; c.sleep = false; }
   save(); showTown('main', text || '城塞都市に戻ってきた。');
+  if (hasAmulet() && !state.cleared) showEnding();
 }
 function enterMaze() {
   if (!partyChars().length) { showTown('edge', 'パーティがいません。酒場で仲間を加えてください。'); return; }
@@ -2226,7 +2305,7 @@ function renderCamp() {
 async function campCast(c, p, tgC, inv) {
   const lines = [], out = async t => { lines.push(t); };
   const r = await doSpell(c, p, tgC ? { c: tgC } : null, out, false, inv);
-  if (inv) c.items.splice(c.items.indexOf(inv), 1);
+  if (inv && !ITEMS[inv.t].keep) c.items.splice(c.items.indexOf(inv), 1);
   sortParty(); save();
   if (r === 'town') return;
   if (r === 'malor') { malor = { f: state.floor, x: state.x, y: state.y, c }; return campShow('malor', lines); }
@@ -2299,6 +2378,7 @@ function shopAct(k, a) {
   }
   const inv = c.items[+a], it = inv && ITEMS[inv.t], price = it ? Math.max(1, Math.floor(it.p / 2)) : 0;
   if (k === 'sell') {
+    if (it.keep) return showTown('shop', 'そいつは売り物にはならないよ。王様のところへ持っていきな。');
     if (inv.e && it.cur) return showTown('shop', '呪われた装備は、先に呪いを解かないと売れないよ。');
     c.items.splice(+a, 1); c.gold += price; if (!isBase(it)) { state.shop = state.shop || {}; state.shop[it.i] = (state.shop[it.i] || 0) + 1; }
     recalc(c); save(); sfx('gold'); return showTown('shop', `${itName(inv)} を ${price} G で売った。`);
@@ -2416,9 +2496,15 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 window.addEventListener('resize', () => drawMini());
 
+// ===== title screen: the first touch unlocks audio and starts the music =====
+$('tver').textContent = APP_VERSION;
+$('titleScreen').addEventListener('click', () => {
+  sndInit(); sndVolumes(); $('titleScreen').classList.remove('on');
+  SND.cur = null; playMusic(curMusic()); sfx('stairs');
+});
 // ===== boot =====
 $('ver').textContent = APP_VERSION; $('ver3').textContent = APP_VERSION;
-$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（Step 4）　`;
+$('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（完成版）　`;
 if (load()) {
   applySettings(); curAng = state.dir * Math.PI / 2; getFloor(state.floor); renderNow();
   if (state.location === 'dungeon' && partyChars().length) { arrive(); say(`続きから再開した。地下${state.floor}階。`); }
@@ -2431,7 +2517,7 @@ if (load()) {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
-window.__meikyu = { ITEMS, SPELLS, openCamp, doSpell, changeFloorTo, featAt, startBattle, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
+window.__meikyu = { startBoss, showEnding, goTown, ITEMS, SPELLS, openCamp, doSpell, changeFloorTo, featAt, startBattle, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
 })();
 </script>
 </body>

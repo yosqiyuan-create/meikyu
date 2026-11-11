@@ -1,5 +1,5 @@
 // Offline cache for Meikyu (Step 1). Bump VERSION whenever files change.
-const VERSION = 'meikyu-v0.6.0';
+const VERSION = 'meikyu-v1.0.0';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
