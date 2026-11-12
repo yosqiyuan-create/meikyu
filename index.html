@@ -248,11 +248,16 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
     <div class="row"><h3>BGM（音楽）</h3>
       <div class="seg" id="segBgm"><button class="btn" data-v="0">オフ</button><button class="btn" data-v="1">オン</button></div>
       <div style="margin-top:8px">音量 <input type="range" id="volBgm" min="0" max="1" step="0.05" style="width:60%;vertical-align:middle"></div>
+      <button class="btn" id="sndTest" style="margin-top:8px">音のテスト</button> <span class="note" id="sndState"></span>
     </div>
     <div class="row"><h3>効果音</h3>
       <div class="seg" id="segSnd"><button class="btn" data-v="0">オフ</button><button class="btn" data-v="1">オン</button></div>
       <div style="margin-top:8px">音量 <input type="range" id="volSe" min="0" max="1" step="0.05" style="width:60%;vertical-align:middle"></div>
       <div class="note">iPhoneのマナーモード（横のスイッチ）がオンだと鳴りません。</div>
+    </div>
+    <div class="row"><h3>マナーモード中も音を出す</h3>
+      <div class="seg" id="segSilent"><button class="btn" data-v="0">出さない</button><button class="btn" data-v="1">出す</button></div>
+      <div class="note">「出す」にすると、横のスイッチがマナーモードでもBGMと効果音が鳴ります（電車の中では注意）。iOS 17以降で使えます。</div>
     </div>
     <div class="row"><h3>アプリの更新</h3>
       <div>今の版：<b id="verNow"></b>　<span id="updInfo" class="note"></span></div>
@@ -293,7 +298,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v1.3';
+const APP_VERSION = 'v1.4';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -583,7 +588,7 @@ function render(px, py, ang) {
 }
 
 // ===== state & save =====
-let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: true, bgmVol: 0.6, seVol: 0.7, darkPos: false, bgmOn7: true };
+let state, settings = { showAll: false, fs: 1, anim: true, sound: false, bgm: true, bgmVol: 0.6, seVol: 0.7, darkPos: false, bgmOn7: true, silentPlay: false };
 function newState(seed) {
   return { v: 2, seed, floor: 1, x: 0, y: 0, dir: 0, maxFloor: 1, explored: {}, trail: {}, roster: [], party: [], nextId: 1, location: 'town' };
 }
@@ -1029,7 +1034,17 @@ function sfx(name) {
   }
 }
 // unlock audio on the first touch (iOS requirement)
-document.addEventListener('pointerdown', () => { if (settings.bgm || settings.sound) { sndInit(); if (SND.want && !SND.cur) playMusic(SND.want); } }, { passive: true });
+// iOS unlocks audio only on touchend / click (not touchstart): create & resume there, play a silent buffer
+function unlockAudio() {
+  if (!(settings.bgm || settings.sound)) return;
+  try { if (navigator.audioSession) navigator.audioSession.type = settings.silentPlay ? 'playback' : 'ambient'; } catch (e) { }
+  if (!sndInit()) return;
+  try { const b = SND.ctx.createBuffer(1, 1, 22050), src = SND.ctx.createBufferSource(); src.buffer = b; src.connect(SND.ctx.destination); src.start(0); } catch (e) { }
+  const go = () => { if (SND.want && settings.bgm && document.getElementById('titleScreen') && !document.getElementById('titleScreen').classList.contains('on') && (!SND.cur || SND.stale)) { SND.stale = false; SND.cur = null; playMusic(SND.want); } };
+  if (SND.ctx.state !== 'running') SND.ctx.resume().then(go).catch(() => { }); else go();
+}
+document.addEventListener('touchend', unlockAudio, { passive: true, capture: true });
+document.addEventListener('click', unlockAudio, { capture: true });
 document.addEventListener('visibilitychange', () => { if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend().catch(() => { }); else SND.ctx.resume().catch(() => { }); });
 
 // ===== monsters (Step 3) =====
@@ -2425,7 +2440,7 @@ function setSeg(id, val) { for (const b of $(id).children) b.classList.toggle('o
 function refreshMenu() {
   $('seedNow').textContent = state.seed;
   setSeg('segMap', settings.showAll ? 1 : 0); setSeg('segFs', settings.fs);
-  setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0); setSeg('segBgm', settings.bgm ? 1 : 0); setSeg('segDark', settings.darkPos ? 1 : 0);
+  setSeg('segAnim', settings.anim ? 1 : 0); setSeg('segSnd', settings.sound ? 1 : 0); setSeg('segBgm', settings.bgm ? 1 : 0); setSeg('segSilent', settings.silentPlay ? 1 : 0); setSeg('segDark', settings.darkPos ? 1 : 0);
   $('volBgm').value = settings.bgmVol; $('volSe').value = settings.seVol; $('verNow').textContent = APP_VERSION;
 }
 function applySettings() { document.documentElement.style.setProperty('--fs', [14, 17, 21][settings.fs] + 'px'); }
@@ -2436,10 +2451,16 @@ bindSeg('segMap', v => settings.showAll = !!v);
 bindSeg('segFs', v => settings.fs = v);
 bindSeg('segAnim', v => settings.anim = !!v);
 bindSeg('segDark', v => { settings.darkPos = !!v; drawMini(); updateStatus(); });
+bindSeg('segSilent', v => { settings.silentPlay = !!v; unlockAudio(); });
 bindSeg('segSnd', v => { settings.sound = !!v; sndInit(); sndVolumes(); sfx('heal'); });
-bindSeg('segBgm', v => { settings.bgm = !!v; sndInit(); sndVolumes(); if (v) playMusic(curMusic()); else stopMusic(); });
+bindSeg('segBgm', v => { settings.bgm = !!v; unlockAudio(); sndVolumes(); if (v) { SND.cur = null; playMusic(curMusic()); } else stopMusic(); });
 $('volBgm').oninput = e => { settings.bgmVol = +e.target.value; sndVolumes(); save(); };
 $('volSe').oninput = e => { settings.seVol = +e.target.value; sndVolumes(); sfx('hit'); save(); };
+$('sndTest').onclick = () => {
+  const keep = settings.sound; settings.sound = true; unlockAudio(); sndVolumes();
+  setTimeout(() => { sfx('level'); jingle('win'); tone(SND.se, 'square', 660, SND.ctx.currentTime + 0.02, 0.4, 0.6); setTimeout(() => { settings.sound = keep; sndVolumes(); }, 1200);
+    $('sndState').textContent = SND.ctx ? `状態：${SND.ctx.state === 'running' ? '再生できる状態' : SND.ctx.state === 'suspended' ? '止まっている（もう一度押してください）' : SND.ctx.state}` : '状態：音が使えません'; }, 150);
+};
 function curMusic() { return BT ? 'battle' : state.location === 'town' ? 'town' : 'maze'; }
 function startDungeon(seed) {
   const keep = state ? { roster: state.roster, party: state.party, nextId: state.nextId } : null;
@@ -2641,8 +2662,9 @@ window.addEventListener('gamepaddisconnected', () => { const any = [...(navigato
 // ===== title screen: the first touch unlocks audio and starts the music =====
 $('tver').textContent = APP_VERSION;
 $('titleScreen').addEventListener('click', () => {
-  sndInit(); sndVolumes(); $('titleScreen').classList.remove('on');
-  SND.cur = null; playMusic(curMusic()); sfx('stairs');
+  $('titleScreen').classList.remove('on');
+  SND.want = curMusic(); SND.cur = null; unlockAudio(); sndVolumes(); playMusic(curMusic()); sfx('stairs');
+  setTimeout(() => { if (settings.bgm && (!SND.ctx || SND.ctx.state !== 'running')) say('音を出すには、画面に一度タッチしてください。'); }, 600);
 });
 // ===== boot =====
 $('ver').textContent = APP_VERSION; $('ver3').textContent = APP_VERSION;
