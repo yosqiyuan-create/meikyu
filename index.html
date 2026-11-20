@@ -270,6 +270,12 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
     </div>
     <div class="row"><h3>セーブデータ</h3>
       <div class="note" style="margin-top:0">1歩ごとに自動で保存しています。念のため、ファイルに書き出しておけます（機種変更のときにも使えます）。</div>
+      <button class="btn act" id="cpSave">コピーする（引っ越し用）</button>
+      <button class="btn act" id="psSave">貼り付けて読み込む</button>
+      <div class="note">アイコンを作り直す前に「コピーする」を押し、作り直したあと「貼り付けて読み込む」で戻せます。</div>
+      <textarea id="psArea" style="display:none;width:100%;height:5.5em;margin-top:6px;font-size:12px;border-radius:8px;background:#000;color:#fff;border:1px solid #4a6aa8" placeholder="ここを長押しして「ペースト」してください"></textarea>
+      <button class="btn" id="psGo" style="display:none">この内容で読み込む</button>
+      <div class="note" id="mvInfo"></div>
       <button class="btn" id="exp">書き出す</button>
       <button class="btn" id="imp">読み込む</button>
       <input type="file" id="impFile" accept=".json,application/json" style="display:none">
@@ -298,7 +304,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v1.4';
+const APP_VERSION = 'v1.7';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -1045,7 +1051,7 @@ function unlockAudio() {
 }
 document.addEventListener('touchend', unlockAudio, { passive: true, capture: true });
 document.addEventListener('click', unlockAudio, { capture: true });
-document.addEventListener('visibilitychange', () => { if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend().catch(() => { }); else SND.ctx.resume().catch(() => { }); });
+document.addEventListener('visibilitychange', () => { if (SND.ctx && document.hidden) SND.ctx.suspend().catch(() => { }); });
 
 // ===== monsters (Step 3) =====
 // Format: name|tier(1-10)|type|flags   flags: P poison, Z paralyze, S stone, D level drain, C critical (beheading),
@@ -2485,6 +2491,24 @@ $('exp').onclick = () => {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
+// move save data via the clipboard (works in the home-screen app where downloads may not)
+function loadSaveText(txt) {
+  const sv = JSON.parse(txt), st = migrate(sv.state); if (!st) throw 0;
+  state = st; Object.assign(settings, sv.settings || {}); floors = []; curAng = state.dir * Math.PI / 2;
+  applySettings(); renderNow(); refreshMenu(); menuScreen.classList.remove('on');
+  if (state.location === 'dungeon' && partyChars().length) { townEl.classList.remove('on'); arrive(); say('セーブデータを読み込んだ。'); }
+  else { state.location = 'town'; save(); showTown('main', 'セーブデータを読み込んだ。'); }
+}
+$('cpSave').onclick = async () => {
+  const txt = JSON.stringify({ app: 'meikyu', state, settings });
+  try { await navigator.clipboard.writeText(txt); $('mvInfo').textContent = `コピーしました（キャラクター ${state.roster.length}人）。このあとアイコンを作り直してください。念のため、メモアプリに貼り付けておくと安心です。`; }
+  catch (e) { $('psArea').style.display = ''; $('psArea').value = txt; $('psArea').select(); $('mvInfo').textContent = '自動でコピーできませんでした。上の文字を全部選んで「コピー」してください。'; }
+};
+$('psSave').onclick = async () => {
+  try { const t = await navigator.clipboard.readText(); if (t && t.includes('"meikyu"')) return ask('コピーしておいたセーブデータを読み込みますか？\n今のデータは上書きされます。', () => { try { loadSaveText(t); } catch (e) { $('mvInfo').textContent = '読み込めませんでした。'; } }); } catch (e) { }
+  $('psArea').style.display = ''; $('psGo').style.display = ''; $('psArea').value = ''; $('mvInfo').textContent = '下の枠を長押しして「ペースト」し、「この内容で読み込む」を押してください。';
+};
+$('psGo').onclick = () => { try { loadSaveText($('psArea').value.trim()); $('psArea').style.display = 'none'; $('psGo').style.display = 'none'; } catch (e) { $('mvInfo').textContent = '読み込めませんでした。コピーした内容をそのまま貼り付けてください。'; } };
 $('imp').onclick = () => $('impFile').click();
 $('impFile').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
@@ -2519,8 +2543,8 @@ $('updBtn').onclick = async () => {
   try {
     const v = await latestVersion();
     if (!v) throw 0;
-    if (v === APP_VERSION) { $('updInfo').textContent = 'これが最新版です。'; return; }
-    $('updInfo').textContent = `${v} に更新します…`; hardUpdate();
+    if (v === APP_VERSION) { $('updInfo').textContent = `今のアプリ：${APP_VERSION}／公開中：${v}　これが最新版です。（アップロード直後は10分ほど待ってから押してください）`; return; }
+    $('updInfo').textContent = `今のアプリ：${APP_VERSION}／公開中：${v}　更新します…`; hardUpdate();
   } catch (e) { $('updInfo').textContent = '確認できませんでした（電波のある所で試してください）。'; }
 };
 setTimeout(async () => { // quiet check at start-up
@@ -2663,9 +2687,22 @@ window.addEventListener('gamepaddisconnected', () => { const any = [...(navigato
 $('tver').textContent = APP_VERSION;
 $('titleScreen').addEventListener('click', () => {
   $('titleScreen').classList.remove('on');
-  SND.want = curMusic(); SND.cur = null; unlockAudio(); sndVolumes(); playMusic(curMusic()); sfx('stairs');
+  SND.want = curMusic(); SND.cur = null; unlockAudio(); if (SND.ctx && SND.ctx.state !== 'running') SND.ctx.resume().catch(() => { });
+  sndVolumes(); playMusic(curMusic()); sfx('stairs');
   setTimeout(() => { if (settings.bgm && (!SND.ctx || SND.ctx.state !== 'running')) say('音を出すには、画面に一度タッチしてください。'); }, 600);
 });
+// every time the app comes back (from the home screen / app switcher), start again from the title screen
+let wentAway = false;
+function backToTitle() {
+  stopMusic(); if (SND.ctx) SND.ctx.suspend().catch(() => { });
+  $('titleScreen').classList.add('on');
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { wentAway = true; try { save(); } catch (e) { } }
+  else if (wentAway) { wentAway = false; backToTitle(); }
+});
+window.addEventListener('pagehide', () => { wentAway = true; try { save(); } catch (e) { } });
+window.addEventListener('pageshow', e => { if (e.persisted || wentAway) { wentAway = false; backToTitle(); } });
 // ===== boot =====
 $('ver').textContent = APP_VERSION; $('ver3').textContent = APP_VERSION;
 $('ver2').textContent = `迷宮探索 by Urushihara ${APP_VERSION}（完成版）　`;
