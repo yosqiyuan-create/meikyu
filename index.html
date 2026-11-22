@@ -304,7 +304,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v1.7';
+const APP_VERSION = 'v1.8';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -2015,6 +2015,7 @@ function renderTown() {
   let h = '';
   if (tview === 'main') {
     h = `<div class="tv">${m}<p class="lead">どこへ行きますか？</p><div class="tlist">
+      ${state.party.length < PARTY_MAX ? B('quick', '★ おまかせパーティを作る', '名前も職業も自動で、すぐ冒険に出られる6人をそろえる', 'act') : ''}
       ${B('go:tavern', 'ギルガメッシュの酒場', 'パーティを組む・外す')}
       ${B('go:inn', '冒険者の宿', '休んで回復・レベルアップ')}
       ${B('go:shop', 'ボルタック商店', '武器・防具の売り買い・鑑定・呪い解き')}
@@ -2153,6 +2154,43 @@ function makeChar() {
   state.roster.push(ch); return ch;
 }
 
+// --- one-tap party (balanced classic line-up, random fitting names) ---
+const QUICK = [ // front row: two fighters + priest / back row: thief, mage, bishop
+  { cls: 'FIG', race: 'DWA', al: 'G', names: '勇ましい' }, { cls: 'FIG', race: 'HUM', al: 'G', names: '勇ましい' },
+  { cls: 'PRI', race: 'DWA', al: 'G', names: '知的・神秘' }, { cls: 'THI', race: 'HOB', al: 'N', names: '小柄・愉快' },
+  { cls: 'MAG', race: 'ELF', al: 'G', names: '知的・神秘' }, { cls: 'BIS', race: 'ELF', al: 'G', names: '知的・神秘' }
+];
+function quickParty() {
+  const free = PARTY_MAX - state.party.length, room = ROSTER_MAX - state.roster.length;
+  if (free <= 0) return showTown('main', 'パーティはもう6人そろっている。');
+  const n = Math.min(free, room); if (n <= 0) return showTown('main', `訓練場の登録がいっぱいです（${ROSTER_MAX}人）。訓練場でキャラクターを消してください。`);
+  // fill the missing slots following the line-up order
+  const have = partyChars().map(c => c.cls), plan = [];
+  for (const q of QUICK) { const k = have.indexOf(q.cls); if (k >= 0) have.splice(k, 1); else plan.push(q); }
+  while (plan.length < n) plan.push(QUICK[plan.length % QUICK.length]);
+  const made = [];
+  for (const q of plan.slice(0, n)) {
+    const used = new Set(state.roster.map(c => c.name)), pool = NAME_SETS[q.names].split(' ').filter(x => !used.has(x));
+    const all = Object.values(NAME_SETS).join(' ').split(' ').filter(x => !used.has(x));
+    const name = pool.length ? pool[rnd(pool.length)] : all[rnd(all.length)];
+    const c = clsOf(q.cls), r = raceOf(q.race);
+    let al = q.al; if (state.party.length && partyChars().some(p => p.align === 'E') && al === 'G') al = 'N';
+    if (!c.al.includes(al)) al = c.al[0];
+    // roll bonus points and pour them into what the class needs, then vitality/agility/luck
+    let stats = { ...r.b }, bonus = rollBonus();
+    for (const [k, v] of Object.entries(c.req)) while (stats[k] < v && bonus > 0) { stats[k]++; bonus--; }
+    const PRIO = { FIG: [['str', 17], ['vit', 15], ['agi', 13]], PRI: [['pie', 16], ['vit', 15], ['str', 13]], THI: [['agi', 17], ['vit', 13], ['luc', 16]],
+      MAG: [['iq', 17], ['vit', 13], ['agi', 13]], BIS: [['iq', 15], ['pie', 15], ['vit', 13]] }[q.cls] || [['vit', 15]];
+    for (const [k, cap] of PRIO) while (bonus > 0 && stats[k] < cap) { stats[k]++; bonus--; }
+    for (const k of ['vit', 'agi', 'luc', 'str', 'iq', 'pie']) while (bonus > 0 && stats[k] < MAXSTAT) { stats[k]++; bonus--; }
+    if (!canBe(c, stats, al)) { stats = { ...r.b, ...Object.fromEntries(Object.entries(c.req).map(([k, v]) => [k, Math.max(v, r.b[k])])) }; }
+    cr = { name, race: q.race, align: al, cls: q.cls, stats };
+    const ch = makeChar(); state.party.push(ch.id); made.push(`${ch.name}（${ALIGNS[ch.align]}・${raceOf(ch.race).n}・${c.n}）`);
+  }
+  cr = null; save(); sfx('heal');
+  showTown('edge', `おまかせで ${made.length}人 の仲間がそろった！\n${made.join('\n')}\n\n「迷宮に入る」ですぐ出発できます。`);
+}
+
 // --- inn & temple (Step 3) ---
 const ROOMS = [['馬小屋', 0, 0], ['簡易寝台', 10, 1], ['エコノミールーム', 50, 3], ['商人のスイート', 200, 7], ['ロイヤルスイート', 500, 10]];
 const TEMPLE_FEE = { '麻痺': 100, '石化': 200, '死亡': 250, '灰': 500 };
@@ -2219,6 +2257,7 @@ function templeHeal(id) {
 function townAct(t) {
   const [k, a, b] = t.split(':');
   if (k === 'go') return showTown(a);
+  if (k === 'quick') return ask('おまかせでパーティを作りますか？\n名前・種族・職業を自動で決めて、空いている枠に仲間を加えます。', quickParty);
   if (k === 'maze') return enterMaze();
   if (k === 'add') {
     const c = charById(+a), ps = partyChars();
