@@ -70,6 +70,14 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 #battle{display:none;flex:1;flex-direction:column;gap:7px;padding:8px 10px;background:#0a0710;border-top:2px solid #7a2a2a;min-height:150px;overflow:auto}
 .bgroups{font-size:.88em;line-height:1.5;color:#ffd7c4}
 .bq{font-size:.95em}
+.cwin{position:relative;border:2px solid #f2f2f2;border-radius:8px;padding:14px 8px 8px;margin-top:8px;background:#05050a}
+.cwin .who{position:absolute;top:-11px;left:10px;background:#05050a;padding:0 8px;font-weight:bold;font-size:1.05em;color:#fff}
+.cwin .who small{color:#9fb3d9;font-weight:normal;margin-left:6px}
+.cwin .step{position:absolute;top:-9px;right:10px;background:#05050a;padding:0 6px;font-size:.78em;color:#9fb3d9}
+.orders{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:.8em;color:#c9d3e8}
+.orders span.now{color:#ffe066;font-weight:bold}
+.orders span.done b{color:#8fe3a8}
+.ptable tr.cur td{background:#3a3210;color:#ffe066}
 .bbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .bbtns .btn{padding:11px 6px;font-size:1em}
 .bbtns .btn[disabled]{opacity:.35}
@@ -313,7 +321,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -1355,18 +1363,37 @@ function groupListHTML() {
     return `<div>${i + 1}) ${esc(groupName(g))}　${l.length}匹 <span class="note">（${awake}）</span></div>`;
   }).join('') + '</div>';
 }
+function cmdText(cm) {
+  if (!cm) return '';
+  const tgt = cm.g != null && BT.groups[cm.g] ? groupName(BT.groups[cm.g]) : cm.ally ? cm.ally.name : '';
+  const w = cm.a === 'fight' ? 'たたかう' : cm.a === 'parry' ? 'ぼうぎょ' : cm.a === 'spell' ? cm.p.n : cm.a === 'item' ? itName(cm.inv) : '';
+  return w + (tgt ? '→' + tgt : '');
+}
+function ordersHTML() {
+  const ps = partyChars();
+  return '<div class="orders">' + ps.map((x, i) => {
+    if (!canAct(x)) return `<span>${esc(x.name)}：<i>うごけない</i></span>`;
+    const cm = BT.cmds.find(o => o.c === x);
+    if (i === BT.ci) return `<span class="now">▶${esc(x.name)}：？</span>`;
+    return cm ? `<span class="done">${esc(x.name)}：<b>${esc(cmdText(cm))}</b></span>` : `<span>${esc(x.name)}：…</span>`;
+  }).join('') + '</div>';
+}
+function markCurrent() {
+  const rows = $('party').querySelectorAll('tr'), live = BT && ['cmd', 'spell', 'item', 'ally', 'target'].includes(BT.mode);
+  rows.forEach((tr, i) => tr.classList.toggle('cur', !!live && i - 1 === BT.ci));
+}
 function renderBattleUI() {
   const ps = partyChars(), BB = (t, l, cls, dis) => `<button class="btn ${cls || ''}" data-b="${t}" ${dis ? 'disabled' : ''}>${l}</button>`;
   let h = groupListHTML();
   if (BT.mode === 'friendly') h += `<div class="bq">どうしますか？</div><div class="bbtns two">${BB('fr:fight', '戦う', 'act')}${BB('fr:leave', '立ち去る')}</div>`;
   else if (BT.mode === 'cmd') {
     const c = ps[BT.ci], front = BT.ci < 3;
-    h += `<div class="bq"><b>${esc(c.name)}</b>${c.maxmp ? ` <small>MP ${c.mp}/${c.maxmp}</small>` : ''}　どうする？</div><div class="bbtns">
+    h += `<div class="bq">${esc(c.name)}は どうする？</div><div class="bbtns">
       ${BB('c:fight', 'たたかう', 'act')}${BB('c:spell', 'じゅもん', '', !battleSpells(c).length)}${BB('c:item', 'どうぐ', '', !battleItems(c).length)}${BB('c:parry', 'ぼうぎょ')}${BB('c:run', 'にげる', 'sub')}
       ${BT.cmds.length ? BB('c:undo', 'もどる', 'sub') : ''}</div>`;
   } else if (BT.mode === 'spell') {
     const c = ps[BT.ci];
-    h += `<div class="bq"><b>${esc(c.name)}</b> MP ${c.mp}/${c.maxmp}　どの じゅもん？</div><div class="bbtns">` + battleSpells(c).map(p => BB('sp:' + p.n, `${p.n} <small>MP${p.mp}</small>`)).join('') + BB('t:back', 'もどる', 'sub') + '</div>';
+    h += `<div class="bq">どの じゅもんを となえる？</div><div class="bbtns">` + battleSpells(c).map(p => BB('sp:' + p.n, `${p.n} <small>MP${p.mp}</small>`)).join('') + BB('t:back', 'もどる', 'sub') + '</div>';
   } else if (BT.mode === 'item') {
     const c = ps[BT.ci];
     h += `<div class="bq">どの どうぐを つかう？</div><div class="bbtns">` + battleItems(c).map(x => BB('it:' + c.items.indexOf(x), itName(x))).join('') + BB('t:back', '戻る', 'sub') + '</div>';
@@ -1385,7 +1412,12 @@ function renderBattleUI() {
     h += `<div class="bq">この指示で戦いますか？</div><div class="bbtns two">${BB('go', '戦う！', 'act')}${BB('c:undo', 'やり直す', 'sub')}</div>`;
   } else if (BT.mode === 'run') h += `<div class="bq note">……</div>`;
   else if (BT.mode === 'end') h += `<div class="bbtns two">${BB('end', '先へ進む', 'act')}</div>`;
-  battleEl.innerHTML = h;
+  if (['cmd', 'spell', 'item', 'ally', 'target'].includes(BT.mode)) { // DQ-style window titled with the member's name
+    const c = ps[BT.ci], cl = clsOf(c.cls), n = ps.filter(canAct).length, k = ps.slice(0, BT.ci + 1).filter(canAct).length;
+    const head = groupListHTML(), body = h.slice(head.length);
+    h = head + ordersHTML() + `<div class="cwin"><div class="who">${esc(c.name)}<small>${cl.n}　HP ${c.hp}/${c.maxhp}${c.maxmp ? `　MP ${c.mp}/${c.maxmp}` : ''}</small></div><div class="step">${k}/${n}人目</div>${body}</div>`;
+  }
+  battleEl.innerHTML = h; markCurrent();
 }
 battleEl.addEventListener('click', e => {
   const b = e.target.closest('[data-b]'); if (!b || b.disabled || !BT) return;
