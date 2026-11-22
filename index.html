@@ -27,7 +27,7 @@ body{font-size:var(--fs)}
 #mini{position:absolute;top:6px;right:6px;width:31%;aspect-ratio:1;border:2px solid #c9a227;border-radius:4px;background:#000;opacity:.92}
 .shake{animation:shake .22s}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-#msg{min-height:2.9em;padding:8px 12px;background:#0b0f1a;border-top:1px solid #2a2f3d;line-height:1.45}
+#msg{white-space:pre-line;min-height:2.9em;padding:8px 12px;background:#0b0f1a;border-top:1px solid #2a2f3d;line-height:1.45}
 #actions{display:flex;gap:8px;padding:0 10px 4px;background:#0b0f1a;min-height:0}
 #actions:empty{display:none}
 #pad{flex:1;display:grid;grid-template-columns:1fr 1.15fr 1fr;grid-template-rows:1.25fr 1fr;gap:9px;padding:10px;background:#05070c;min-height:150px}
@@ -58,6 +58,15 @@ button{font:inherit;color:#fff;border:none;cursor:pointer}
 .note{font-size:.8em;color:#9aa6bd;margin-top:6px;line-height:1.5}
 #party{background:#070a12;border-top:1px solid #2a2f3d;padding:3px 6px;font-size:.74em}
 #party:empty{display:none}
+#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;image-rendering:pixelated}
+.bigshake{animation:bigshake .45s}
+@keyframes bigshake{0%,100%{transform:translate(0,0)}15%{transform:translate(-10px,4px)}30%{transform:translate(9px,-5px)}45%{transform:translate(-7px,3px)}60%{transform:translate(6px,-2px)}80%{transform:translate(-3px,1px)}}
+.ptable tr.rowhit td{animation:rowhit .6s}
+@keyframes rowhit{0%{background:#ff2a1a;color:#fff}100%{background:transparent}}
+.ptable tr.rowdead td{animation:rowdead 1.1s}
+@keyframes rowdead{0%{background:#000;color:#ff4030}30%{background:#7a0000;color:#fff}100%{background:transparent}}
+.ptable tr.rowheal td{animation:rowheal .8s}
+@keyframes rowheal{0%{background:#1fa05a;color:#fff}100%{background:transparent}}
 #battle{display:none;flex:1;flex-direction:column;gap:7px;padding:8px 10px;background:#0a0710;border-top:2px solid #7a2a2a;min-height:150px;overflow:auto}
 .bgroups{font-size:.88em;line-height:1.5;color:#ffd7c4}
 .bq{font-size:.95em}
@@ -169,7 +178,7 @@ input.name{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-rad
 <div id="app">
   <div id="title"><b>迷宮探索</b> <span class="by">by Urushihara</span> <span class="ver" id="ver"></span></div>
   <div id="status"><span id="pos">B1</span><span class="sub" id="theme"></span></div>
-  <div id="viewWrap"><canvas id="view"></canvas><canvas id="mini"></canvas></div>
+  <div id="viewWrap"><canvas id="view"></canvas><canvas id="fx"></canvas><canvas id="mini"></canvas></div>
   <div id="party"></div>
   <div id="msg"></div>
   <div id="actions"></div>
@@ -304,7 +313,7 @@ const DN = ['北', '東', '南', '西'];
 const OPEN = 0, WALL = 1, DOOR = 2;
 const CORR = 0, ROOM = 1, UP = 2, DOWN = 3;
 const SAVE_KEY = 'meikyu_step1_save';
-const APP_VERSION = 'v1.8';
+const APP_VERSION = 'v2.1';
 const mod = (n, m = SIZE) => ((n % m) + m) % m;
 const $ = id => document.getElementById(id);
 
@@ -722,10 +731,10 @@ function addAct(label, fn) {
 function partyTable(compact) {
   const ps = partyChars();
   if (!ps.length) return compact ? '' : '<div class="note" style="margin:0">パーティはいません。酒場で仲間を加えてください。</div>';
-  let h = '<table class="ptable"><tr><th>#</th><th>名前</th><th>職業</th><th class="num">AC</th><th class="num">HP</th><th>状態</th></tr>';
+  let h = '<table class="ptable"><tr><th>#</th><th>名前</th><th>職業</th><th class="num">AC</th><th class="num">HP</th><th class="num">MP</th><th>状態</th></tr>';
   ps.forEach((c, i) => {
     const cl = clsOf(c.cls), low = c.hp < c.maxhp / 3;
-    h += `<tr class="${i >= 3 ? 'back' : ''}${i === 3 ? ' sep' : ''}"><td>${i + 1}</td><td class="nm">${c.honor ? '&gt;' : ''}${esc(c.name)}</td><td>${c.align}-${compact ? cl.s : cl.n}</td><td class="num">${c.ac}</td><td class="num ${low ? 'hpbad' : ''}">${c.hp}/${c.maxhp}</td><td class="${c.status !== 'OK' || c.poison ? 'hpbad' : ''}">${c.status === 'OK' ? (c.sleep ? '睡眠' : c.poison ? '毒' : 'OK') : c.status}</td></tr>`;
+    h += `<tr class="${i >= 3 ? 'back' : ''}${i === 3 ? ' sep' : ''}"><td>${i + 1}</td><td class="nm">${c.honor ? '&gt;' : ''}${esc(c.name)}</td><td>${c.align}-${compact ? cl.s : cl.n}</td><td class="num">${c.ac}</td><td class="num ${low ? 'hpbad' : ''}">${c.hp}/${c.maxhp}</td><td class="num">${c.maxmp ? c.mp : '-'}</td><td class="${c.status !== 'OK' || c.poison ? 'hpbad' : ''}">${c.status === 'OK' ? (c.sleep ? '睡眠' : c.poison ? '毒' : 'OK') : c.status}</td></tr>`;
   });
   return h + '</table>';
 }
@@ -1277,7 +1286,7 @@ function startBattle(room) {
   const groups = [];
   for (let i = 0; i < Math.min(4, ng); i++) {
     const m = pickMonster(f), n = 1 + rnd(Math.min(m.grp, 2 + f * 2));
-    groups.push({ m, known: rnd(100) < 15, mons: Array.from({ length: n }, () => { const hp = Math.max(1, roll(m.hpN, m.hd)); return { hp, max: hp, sleep: false }; }) });
+    groups.push({ m, known: true, mons: Array.from({ length: n }, (_, k) => { const hp = Math.max(1, roll(m.hpN, m.hd)); return { hp, max: hp, sleep: false, tag: String.fromCharCode(65 + k) }; }) });
   }
   const r = rnd(12);
   BT = { groups, room, surprise: r === 0 ? 'mons' : r === 1 ? 'party' : null, friendly: !room && rnd(16) === 0, round: 0, cmds: [], ci: 0, mode: 'cmd', exp: 0, busy: false };
@@ -1293,20 +1302,42 @@ function startBattle(room) {
   if (BT.surprise === 'party') { BT.mode = 'run'; renderBattleUI(); setTimeout(() => runRound(true), 700); return; }
   beginCommands();
 }
+const monName = (g, m) => groupName(g) + (g.mons.length > 1 && m && m.tag ? m.tag : '');
+function monLayout() { // every live monster, left to right, groups kept together
+  const list = []; if (!BT) return list;
+  BT.groups.forEach((g, gi) => liveMons(g).forEach(mon => list.push({ g, gi, mon })));
+  const n = Math.min(list.length, 10), gaps = new Set(list.slice(0, n).map(e => e.g)).size - 1;
+  const w = Math.min(168, Math.floor((W - 8 - gaps * 8 - (n - 1) * 3) / Math.max(1, n)));
+  const total = n * w + (n - 1) * 3 + gaps * 8; let x = (W - total) / 2, lastG = null;
+  return list.slice(0, n).map((e, i) => {
+    if (lastG !== null && e.g !== lastG) x += 8; lastG = e.g;
+    const r = { ...e, x, y: H - w - 10 - (n <= 3 ? 0 : (i % 2) * 6), w }; x += w + 3; return r;
+  });
+}
+function monBox(mon) { const e = monLayout().find(o => o.mon === mon); return e ? { x: e.x, y: e.y, w: e.w } : { x: W / 2 - 40, y: H / 2 - 40, w: 80 }; }
+function groupBox(g) {
+  const es = monLayout().filter(o => o.g === g); if (!es.length) return { x: W / 2 - 40, y: H / 2 - 40, w: 80 };
+  const x0 = Math.min(...es.map(e => e.x)), x1 = Math.max(...es.map(e => e.x + e.w)), y0 = Math.min(...es.map(e => e.y)), w = es[0].w;
+  return { x: x0, y: y0, w: Math.max(w, x1 - x0), h: w };
+}
 function drawBattle() {
   renderNow();
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
-  const gs = liveGroups(); if (!gs.length) return;
-  const g = gs[0], sp = monSprite(g.m, g.known), n = Math.min(3, liveMons(g).length);
-  const sc = n === 1 ? 7 : n === 2 ? 5.5 : 4.5, w = 24 * sc;
+  if (!BT) return;
   ctx.imageSmoothingEnabled = false;
-  for (let k = 0; k < n; k++) {
-    const x = W / 2 - (n * w + (n - 1) * 6) / 2 + k * (w + 6), y = H - w - 14 - (k === 1 && n === 3 ? 10 : 0);
-    ctx.drawImage(sp, x, y, w, w);
+  const lay = monLayout();
+  for (const e of lay) {
+    ctx.globalAlpha = e.mon.sleep ? 0.55 : 1;
+    ctx.drawImage(monSprite(e.g.m, e.g.known), e.x, e.y, e.w, e.w);
+    ctx.globalAlpha = 1;
+    if (e.g.mons.length > 1 && e.w >= 28) { // A / B / C labels
+      ctx.font = `bold ${Math.max(9, Math.min(14, e.w / 5))}px sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ffe9a8';
+      ctx.strokeText(e.mon.tag, e.x + e.w / 2, e.y - 2); ctx.fillText(e.mon.tag, e.x + e.w / 2, e.y - 2);
+    }
+    if (e.mon.sleep) { ctx.fillStyle = '#9fd3ff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('z', e.x + e.w - 6, e.y + 10); }
   }
-  if (gs.length > 1) { // small icons for the other groups
-    gs.slice(1).forEach((o, k) => { ctx.globalAlpha = 0.85; ctx.drawImage(monSprite(o.m, o.known), 6 + k * 40, 6, 36, 36); ctx.globalAlpha = 1; });
-  }
+  const hidden = BT.groups.reduce((a, g) => a + liveMons(g).length, 0) - lay.length;
+  if (hidden > 0) { ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(`ほか${hidden}匹`, W - 6, 14); }
 }
 function beginCommands() {
   BT.cmds = []; BT.ci = -1; BT.mode = 'cmd'; nextCommander();
@@ -1314,7 +1345,7 @@ function beginCommands() {
 function nextCommander() {
   const ps = partyChars();
   do { BT.ci++; } while (BT.ci < ps.length && !canAct(ps[BT.ci]));
-  if (BT.ci >= ps.length) { BT.mode = 'confirm'; }
+  if (BT.ci >= ps.length) { BT.mode = 'run'; renderBattleUI(); return runRound(false); }
   renderBattleUI();
 }
 function groupListHTML() {
@@ -1330,26 +1361,26 @@ function renderBattleUI() {
   if (BT.mode === 'friendly') h += `<div class="bq">どうしますか？</div><div class="bbtns two">${BB('fr:fight', '戦う', 'act')}${BB('fr:leave', '立ち去る')}</div>`;
   else if (BT.mode === 'cmd') {
     const c = ps[BT.ci], front = BT.ci < 3;
-    h += `<div class="bq"><b>${esc(c.name)}</b> はどうする？</div><div class="bbtns">
-      ${BB('c:fight', '戦う', 'act', !front)}${BB('c:parry', '防御')}${BB('c:spell', '呪文', '', !battleSpells(c).length)}${BB('c:item', 'アイテム', '', !battleItems(c).length)}${BB('c:run', '逃げる', 'sub')}
-      ${BT.ci > 0 || BT.cmds.length ? BB('c:undo', 'やり直す', 'sub') : ''}</div>${front ? '' : '<div class="note">後列からは直接攻撃できません。</div>'}`;
+    h += `<div class="bq"><b>${esc(c.name)}</b>${c.maxmp ? ` <small>MP ${c.mp}/${c.maxmp}</small>` : ''}　どうする？</div><div class="bbtns">
+      ${BB('c:fight', 'たたかう', 'act')}${BB('c:spell', 'じゅもん', '', !battleSpells(c).length)}${BB('c:item', 'どうぐ', '', !battleItems(c).length)}${BB('c:parry', 'ぼうぎょ')}${BB('c:run', 'にげる', 'sub')}
+      ${BT.cmds.length ? BB('c:undo', 'もどる', 'sub') : ''}</div>`;
   } else if (BT.mode === 'spell') {
     const c = ps[BT.ci];
-    h += `<div class="bq"><b>${esc(c.name)}</b> はどの呪文を唱える？</div><div class="bbtns">` + battleSpells(c).map(p => BB('sp:' + p.n, `${p.n} <small>Lv${p.lv} 残${c.mp[p.s][p.lv - 1]}</small>`)).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+    h += `<div class="bq"><b>${esc(c.name)}</b> MP ${c.mp}/${c.maxmp}　どの じゅもん？</div><div class="bbtns">` + battleSpells(c).map(p => BB('sp:' + p.n, `${p.n} <small>MP${p.mp}</small>`)).join('') + BB('t:back', 'もどる', 'sub') + '</div>';
   } else if (BT.mode === 'item') {
     const c = ps[BT.ci];
-    h += `<div class="bq">どれを使う？</div><div class="bbtns">` + battleItems(c).map(x => BB('it:' + c.items.indexOf(x), itName(x))).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+    h += `<div class="bq">どの どうぐを つかう？</div><div class="bbtns">` + battleItems(c).map(x => BB('it:' + c.items.indexOf(x), itName(x))).join('') + BB('t:back', '戻る', 'sub') + '</div>';
   } else if (BT.mode === 'ally') {
-    h += `<div class="bq">誰に？</div><div class="bbtns">` + ps.map((x, i) => BB('al:' + i, `${esc(x.name)} ${x.hp}/${x.maxhp}`)).join('') + BB('t:back', '戻る', 'sub') + '</div>';
+    h += `<div class="bq">だれに？</div><div class="bbtns">` + ps.map((x, i) => BB('al:' + i, `${esc(x.name)} ${x.hp}/${x.maxhp}`)).join('') + BB('t:back', '戻る', 'sub') + '</div>';
   } else if (BT.mode === 'chest') {
-    const th = bestThief(), pr = priestWith('カルフォ');
+    const th = bestThief(), pr = priestWith('インパス');
     h += `<div class="bq">宝箱がある！${BT.chest.guess ? `（調べた結果：${BT.chest.guess}）` : ''}</div><div class="bbtns">
-      ${BB('ch:open', '開ける', 'act')}${BB('ch:look', `調べる${th ? '（' + esc(th.name) + '）' : ''}`, '', !th)}${BB('ch:dis', '罠を外す', '', !th)}${BB('ch:calfo', 'カルフォ', '', !pr)}${BB('ch:leave', '立ち去る', 'sub')}</div>`;
+      ${BB('ch:open', '開ける', 'act')}${BB('ch:look', `調べる${th ? '（' + esc(th.name) + '）' : ''}`, '', !th)}${BB('ch:dis', '罠を外す', '', !th)}${BB('ch:calfo', 'インパス', '', !pr)}${BB('ch:leave', '立ち去る', 'sub')}</div>`;
   } else if (BT.mode === 'disarm') {
     h += `<div class="bq">どの罠だと思う？（外れると作動するかも）</div><div class="bbtns">` + TRAPS.map(t => BB('tr:' + t, t)).join('') + BB('ch:back', '戻る', 'sub') + '</div>';
   } else if (BT.mode === 'target') {
-    h += `<div class="bq">どのグループを攻撃する？</div><div class="bbtns">` +
-      BT.groups.map((g, i) => liveMons(g).length ? BB('t:' + i, `${i + 1}) ${esc(groupName(g))}`) : '').join('') + BB('t:back', '戻る', 'sub') + '</div>';
+    h += `<div class="bq">どの てきを ねらう？</div><div class="bbtns">` +
+      BT.groups.map((g, i) => liveMons(g).length ? BB('t:' + i, `${esc(liveMons(g).length > 1 ? groupName(g) + 'たち' : monName(g, liveMons(g)[0]))} <small>${liveMons(g).length}匹</small>`) : '').join('') + BB('t:back', 'もどる', 'sub') + '</div>';
   } else if (BT.mode === 'confirm') {
     h += `<div class="bq">この指示で戦いますか？</div><div class="bbtns two">${BB('go', '戦う！', 'act')}${BB('c:undo', 'やり直す', 'sub')}</div>`;
   } else if (BT.mode === 'run') h += `<div class="bq note">……</div>`;
@@ -1395,8 +1426,8 @@ battleEl.addEventListener('click', e => {
     say(`${th.name} は宝箱を調べた……「${BT.chest.guess}」だと思う。`); return renderBattleUI();
   }
   if (t === 'ch:calfo') {
-    const pr = priestWith('カルフォ'); pr.mp.P[1]--; BT.chest.guess = rnd(100) < 95 ? BT.chest.trap : TRAPS[rnd(TRAPS.length)];
-    sfx('spell'); say(`${pr.name} はカルフォを唱えた。罠は「${BT.chest.guess}」だ。`); return renderBattleUI();
+    const pr = priestWith('インパス'); pr.mp -= spellByName('インパス').mp; BT.chest.guess = rnd(100) < 95 ? BT.chest.trap : TRAPS[rnd(TRAPS.length)];
+    sfx('spell'); say(`${pr.name}は インパスを となえた！\n罠は「${BT.chest.guess}」だ。`); return renderBattleUI();
   }
   if (t.startsWith('tr:')) {
     const th = bestThief(), name = t.slice(3), ch = BT.chest;
@@ -1407,7 +1438,7 @@ battleEl.addEventListener('click', e => {
   }
   if (t === 'c:parry') { BT.cmds.push({ c: ps[BT.ci], a: 'parry' }); return nextCommander(); }
   if (t === 'c:run') { BT.mode = 'run'; renderBattleUI(); return tryRun(); }
-  if (t === 'c:undo') return beginCommands();
+  if (t === 'c:undo') { const last = BT.cmds.pop(); if (last) BT.ci = partyChars().indexOf(last.c); BT.mode = 'cmd'; return renderBattleUI(); }
   if (t === 'go') { BT.mode = 'run'; renderBattleUI(); return runRound(false); }
   if (t === 'end') return finishBattleView();
 });
@@ -1473,7 +1504,7 @@ async function charAction(cm) {
   }
   if (cm.a !== 'fight') return;
   let gi = cm.g; if (!liveMons(BT.groups[gi]).length) { gi = BT.groups.findIndex(g => liveMons(g).length); if (gi < 0) return; }
-  const g = BT.groups[gi], tgt = liveMons(g)[rnd(liveMons(g).length)];
+  const g = BT.groups[gi], tgt = liveMons(g)[0], tbox = monBox(tgt);
   const wp = weaponOf(c), swings = 1 + Math.floor(c.level / (c.cls === 'NIN' ? 4 : FIGHTER[c.cls] >= 1 ? 5 : 99)), [n, d] = wp.d;
   let hits = 0, dmg = 0;
   for (let i = 0; i < swings; i++) {
@@ -1481,30 +1512,102 @@ async function charAction(cm) {
     if (Math.random() < Math.max(0.05, Math.min(0.95, p))) { hits++; dmg += Math.max(1, roll(n, d) + wp.b + strDmg(c.stats.str)) * (tgt.sleep ? 2 : 1); }
   }
   // ninja critical (beheading)
-  if ((c.cls === 'NIN' || wp.crit) && hits && rnd(100) < Math.min(20, c.level + (wp.crit ? 5 : 0)) && g.m.lv + 10 < rnd(35)) { dmg = tgt.hp; await show(`${c.name} の会心の一撃！　首をはねた！`, 700); }
-  if (!hits) { sfx('miss'); return show(`${c.name} は ${groupName(g)} に斬りかかったが、外れた。`); }
-  tgt.hp -= dmg; sfx('hit');
-  let t = `${c.name} は ${groupName(g)} に ${hits}回当たり、${dmg} のダメージ。`;
-  if (tgt.hp <= 0) { tgt.hp = 0; BT.exp += g.m.exp; t += `${groupName(g)} を倒した！`; sfx('kill'); }
-  await show(t);
+  let t = `${c.name}の こうげき！`;
+  if ((c.cls === 'NIN' || wp.crit) && hits && rnd(100) < Math.min(20, c.level + (wp.crit ? 5 : 0)) && g.m.lv + 10 < rnd(35)) { dmg = tgt.hp; t += '\nかいしんの いちげき！　首をはねた！'; }
+  else if (hits && rnd(32) === 0) { dmg = dmg * 2 + rnd(3); t += '\nかいしんの いちげき！'; fxFlash('#fff', 200, .6); }
+  if (!hits) { sfx('miss'); fxMiss(tbox); return show(`${t}\nミス！ ${monName(g, tgt)}に ダメージを あたえられない！`); }
+  tgt.hp -= dmg; sfx('hit'); fxSlash(tbox, dmg, hits);
+  t += `\n${monName(g, tgt)}に ${dmg}の ダメージ！`;
+  if (tgt.hp <= 0) { tgt.hp = 0; BT.exp += g.m.exp; t += `\n${monName(g, tgt)}を やっつけた！`; sfx('kill'); setTimeout(() => fxMonDie(g, tbox), 250); }
+  await show(t, 1000);
 }
+
+// ===== battle effects (overlay canvas) =====
+const fxCv = $('fx'), fxCtx = fxCv.getContext('2d'); fxCv.width = W; fxCv.height = H; fxCtx.imageSmoothingEnabled = false;
+let fxList = [], fxRaf = 0;
+function fxAdd(dur, draw) {
+  fxList.push({ t0: performance.now(), dur, draw });
+  if (!fxRaf) fxRaf = requestAnimationFrame(fxTick);
+}
+function fxTick(now) {
+  fxCtx.clearRect(0, 0, W, H);
+  fxList = fxList.filter(f => { const k = (now - f.t0) / f.dur; if (k >= 1) return false; fxCtx.save(); f.draw(k, fxCtx); fxCtx.restore(); return true; });
+  fxRaf = fxList.length ? requestAnimationFrame(fxTick) : 0;
+  if (!fxRaf) fxCtx.clearRect(0, 0, W, H);
+}
+function fxNumber(x, y, text, color) {
+  fxAdd(900, (k, g) => {
+    g.globalAlpha = k < .7 ? 1 : 1 - (k - .7) / .3;
+    g.font = 'bold 22px sans-serif'; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#000'; g.fillStyle = color;
+    const yy = y - 26 * Math.sin(Math.min(1, k * 1.6) * Math.PI / 2);
+    g.strokeText(text, x, yy); g.fillText(text, x, yy);
+  });
+}
+function fxSlash(b, dmg, hits) { // party hits a monster (b = its box on screen)
+  const ox = b.x + b.w / 2, oy = b.y + b.w / 2;
+  for (let i = 0; i < Math.min(3, hits); i++) {
+    const a = -0.9 + i * 0.6 + Math.random() * 0.3, L = Math.max(30, b.w * 0.85), delay = i * 0.18;
+    fxAdd(420 + i * 80, (k, g) => {
+      const kk = Math.max(0, (k - delay) / (1 - delay)); if (kk <= 0) return;
+      const e = Math.min(1, kk * 2.2), dx = Math.cos(a) * L / 2, dy = Math.sin(a) * L / 2;
+      g.globalAlpha = 1 - Math.max(0, kk - .5) * 2; g.strokeStyle = '#fff'; g.lineWidth = 4; g.shadowColor = '#ffd27a'; g.shadowBlur = 10;
+      g.beginPath(); g.moveTo(ox - dx, oy - dy); g.lineTo(ox - dx + dx * 2 * e, oy - dy + dy * 2 * e); g.stroke();
+    });
+  }
+  fxAdd(160, (k, g) => { g.globalAlpha = (1 - k) * .55; g.fillStyle = '#fff'; g.fillRect(b.x, b.y, b.w, b.w); });
+  fxNumber(ox, oy - 10, String(dmg), '#ffe066');
+}
+function fxMiss(b) { fxNumber(b.x + b.w / 2, b.y + b.w / 3, 'ミス', '#9fb3d9'); }
+function fxMonDie(g, box) { // the defeated monster fades out in red
+  const b = box || { x: W / 2 - 40, y: H / 2 - 40, w: 80 }, sp = monSprite(g.m, g.known);
+  fxAdd(650, (k, gx) => {
+    gx.globalAlpha = 1 - k; const s = 1 + k * .25, w = b.w * s;
+    gx.drawImage(sp, b.x - (w - b.w) / 2, b.y - (w - b.w) / 2 + k * 30, w, w);
+    gx.globalCompositeOperation = 'source-atop'; gx.fillStyle = 'rgba(255,40,20,.7)'; gx.fillRect(0, 0, W, H);
+  });
+  fxAdd(500, (k, g2) => { // little sparks
+    g2.fillStyle = '#ffb347'; g2.globalAlpha = 1 - k;
+    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, r = 10 + k * 70; g2.fillRect(b.x + b.w / 2 + Math.cos(a) * r, b.y + b.w / 2 + Math.sin(a) * r, 3, 3); }
+  });
+}
+function fxFlash(color, dur, alpha) { fxAdd(dur || 260, (k, g) => { g.globalAlpha = (1 - k) * (alpha || .5); g.fillStyle = color; g.fillRect(0, 0, W, H); }); }
+function fxSpell(color) {
+  fxFlash(color, 380, .45);
+  fxAdd(500, (k, g) => { g.globalAlpha = 1 - k; g.strokeStyle = color; g.lineWidth = 6; g.beginPath(); g.arc(W / 2, H / 2, 10 + k * 180, 0, Math.PI * 2); g.stroke(); });
+}
+function partyRowFx(c, cls) {
+  const i = partyChars().indexOf(c); if (i < 0) return;
+  const rows = $('party').querySelectorAll('tr'); const tr = rows[i + 1]; if (!tr) return;
+  tr.classList.remove(cls); void tr.offsetWidth; tr.classList.add(cls);
+}
+function shakeView(big) { const vw = $('viewWrap'), k = big ? 'bigshake' : 'shake'; vw.classList.remove('shake', 'bigshake'); void vw.offsetWidth; vw.classList.add(k); }
+function fxHurt(c, dmg, dead) {
+  renderParty(); shakeView(dead || dmg >= c.maxhp / 2);
+  fxFlash(dead ? '#000' : '#ff1a1a', dead ? 700 : 280, dead ? .8 : .45);
+  if (dead) fxAdd(900, (k, g) => { g.globalAlpha = k < .2 ? k * 5 : 1 - (k - .2) / .8; g.fillStyle = '#ff3a2a'; g.font = 'bold 26px sans-serif'; g.textAlign = 'center'; g.lineWidth = 5; g.strokeStyle = '#000'; const t = `${c.name} が倒れた！`; g.strokeText(t, W / 2, H / 2); g.fillText(t, W / 2, H / 2); });
+  else fxNumber(W / 2, H * .45, `-${dmg}`, '#ff5a4a');
+  setTimeout(() => partyRowFx(c, dead ? 'rowdead' : 'rowhit'), 0);
+}
+function fxHeal(c, h) { renderParty(); setTimeout(() => partyRowFx(c, 'rowheal'), 0); fxNumber(W / 2, H * .45, `+${h}`, '#5cff9a'); fxFlash('#3cff8a', 300, .25); }
+
 function partyTargets() { const ps = partyChars(); return ps.slice(0, 3).filter(standing); }
 async function hitChar(c, dmg, src, g) {
-  c.hp -= dmg; sfx('hurt');
-  if (c.hp <= 0) { charDies(c); await show(`${src}　${c.name} に ${dmg} のダメージ。${c.name} は死んだ……`, 1100); sfx('death'); return false; }
-  await show(`${src}　${c.name} に ${dmg} のダメージ。`); return true;
+  if (c.parry) dmg = Math.max(1, Math.ceil(dmg / 2)); // ぼうぎょ halves damage
+  c.hp -= dmg; sfx('hurt'); const pre = src ? src + '\n' : '';
+  if (c.hp <= 0) { charDies(c); fxHurt(c, dmg, true); await show(`${pre}${c.name}は ${dmg}の ダメージを うけた！\n${c.name}は しんでしまった！`, 1400); sfx('death'); return false; }
+  fxHurt(c, dmg, false); await show(`${pre}${c.name}は ${dmg}の ダメージを うけた！`, 1000); return true;
 }
 async function monAction(a) {
   const { g, mon } = a, M = g.m; if (mon.hp <= 0) return;
-  const nm = groupName(g);
+  const nm = monName(g, mon);
   if (mon.sleep) return;
   const fl = M.fl, r = rnd(100), ps = partyChars();
-  if (fl.includes('F') && r < 8) { mon.hp = 0; return show(`${nm} は逃げ出した。`, 700); }
+  if (fl.includes('F') && r < 8) { mon.hp = 0; return show(`${nm}は にげだした！`, 800); }
   if (fl.includes('K') && r < 18 && g.mons.length < 9 && rnd(2)) {
-    const hp = Math.max(1, roll(M.hpN, M.hd)); g.mons.push({ hp, max: hp, sleep: false }); return show(`${nm} は仲間を呼んだ！`);
+    const hp = Math.max(1, roll(M.hpN, M.hd)); g.mons.push({ hp, max: hp, sleep: false, tag: String.fromCharCode(65 + g.mons.length) }); return show(`${nm}は なかまを よんだ！\n${groupName(g)}${g.mons[g.mons.length - 1].tag}が あらわれた！`);
   }
   if (fl.includes('B') && r < 30) { // breath: hits everyone
-    sfx('breath'); await show(`${nm} は息を吐きかけた！`, 800);
+    sfx('breath'); fxSpell('#ff7a1a'); await show(`${nm}は はげしい いきを はいた！`, 900);
     for (const c of ps.filter(standing)) {
       let d = Math.max(1, Math.floor(mon.hp / 2)); if (rnd(20) < c.stats.luc / 3) d = Math.floor(d / 2);
       const alive = await hitChar(c, d, '', g);
@@ -1515,24 +1618,25 @@ async function monAction(a) {
   }
   if (fl.includes('M') && r < 35 && !g.silent) return monSpell(g, mon, nm);
   if (fl.includes('H') && r < 30 && !g.silent) {
-    if (rnd(2)) { const heal = roll(1 + Math.floor(M.tier / 2), 8); g.mons.forEach(x => { if (x.hp > 0) x.hp = Math.min(x.max, x.hp + heal); }); sfx('heal'); return show(`${nm} は祈りを唱え、傷を癒やした。`); }
+    if (rnd(2)) { const heal = roll(1 + Math.floor(M.tier / 2), 8); g.mons.forEach(x => { if (x.hp > 0) x.hp = Math.min(x.max, x.hp + heal); }); sfx('heal'); return show(`${nm}は ホイミを となえた！\n${groupName(g)}${g.mons.length > 1 ? "たち" : ""}の キズが かいふくした！`); }
     const tg = ps.filter(standing); if (!tg.length) return; const c = tg[rnd(tg.length)]; sfx('spell');
-    return hitChar(c, roll(Math.max(1, Math.floor(M.tier / 2)), 8), `${nm} は呪いの祈りを唱えた！`);
+    return hitChar(c, roll(Math.max(1, Math.floor(M.tier / 2)), 8), `${nm}は のろいの ことばを となえた！`);
   }
   // melee: only the front three
   const tg = partyTargets(); if (!tg.length) return;
-  const c = tg[rnd(tg.length)], ac = c.ac - (c.parry ? 2 : 0) - (c.bac || 0) - (BT.pac || 0) - (state.pac || 0);
+  const c = tg[rnd(tg.length)], ac = c.ac - (c.bac || 0) - (BT.pac || 0) - (state.pac || 0);
   let hits = 0, dmg = 0;
   for (let i = 0; i < M.att; i++) {
     const p = 0.2 + 0.035 * M.lv + 0.03 * ac + (c.sleep ? 0.3 : 0);
     if (Math.random() < Math.max(0.05, Math.min(0.95, p))) { hits++; dmg += roll(M.dn, M.dd); }
   }
-  if (!hits) { sfx('miss'); return show(`${nm} は ${c.name} に襲いかかったが、外れた。`, 650); }
-  if (fl.includes('C') && rnd(100) < 12 && c.level < M.lv * 2) { charDies(c); sfx('death'); return show(`${nm} の一撃！　${c.name} は首をはねられた！`, 1300); }
-  const alive = await hitChar(c, dmg, `${nm} の攻撃が ${hits}回当たった。`, g);
+  if (!hits) { sfx('miss'); fxNumber(W / 2, H * .45, 'かわした', '#9fd3ff'); return show(`${nm}の こうげき！\n${c.name}は ひらりと みをかわした！`, 900); }
+  if (fl.includes('C') && rnd(100) < 12 && c.level < M.lv * 2) { charDies(c); sfx('death'); fxHurt(c, 0, true); return show(`${nm}の こうげき！\nつうこんの いちげき！　${c.name}は 首をはねられた！`, 1500); }
+  let src = `${nm}の こうげき！`; if (rnd(40) === 0) { dmg = Math.ceil(dmg * 1.5) + 1; src += '\nつうこんの いちげき！'; }
+  const alive = await hitChar(c, dmg, src, g);
   if (!alive) return;
-  if (fl.includes('P') && rnd(3) === 0) { c.poison = true; await show(`${c.name} は毒に冒された！`); }
-  if (fl.includes('Z') && rnd(4) === 0) { c.status = '麻痺'; await show(`${c.name} は体がしびれて動けなくなった！`); }
+  if (fl.includes('P') && rnd(3) === 0) { c.poison = true; await show(`${c.name}は どくに おかされた！`); }
+  if (fl.includes('Z') && rnd(4) === 0) { c.status = '麻痺'; await show(`${c.name}は からだが しびれて うごけなくなった！`); }
   if (fl.includes('S') && rnd(6) === 0) { charDies(c, '石化'); await show(`${c.name} は石になってしまった！`); }
   if (fl.includes('D') && rnd(4) === 0) {
     if (c.level <= 1) { charDies(c); return show(`${c.name} は生命力を吸い尽くされた……`, 1200); }
@@ -1546,14 +1650,14 @@ async function monSpell(g, mon, nm) {
   const M = g.m, ps = partyChars().filter(standing); if (!ps.length) return;
   sfx('spell');
   if (rnd(3) === 0) { // sleep spell
-    await show(`${nm} は眠りの呪文を唱えた！`, 800);
+    await show(`${nm}は ラリホーを となえた！`, 900);
     for (const c of ps) if (rnd(20) > c.stats.luc / 2 + 4) c.sleep = true;
     const sl = ps.filter(c => c.sleep).map(c => c.name);
-    return show(sl.length ? `${sl.join('、')} は眠ってしまった。` : 'しかし、誰も眠らなかった。');
+    return show(sl.length ? `${sl.join('、')}は ねむってしまった！` : 'しかし だれも ねむらなかった！');
   }
-  if (M.tier < 4) { const c = ps[rnd(ps.length)]; return hitChar(c, roll(1, 8), `${nm} は炎の呪文を唱えた！`); }
-  const [n, d, nmS] = M.tier >= 8 ? [8, 8, '凍てつく嵐の呪文'] : M.tier >= 6 ? [6, 6, '業火の呪文'] : [4, 6, '炎の嵐の呪文'];
-  await show(`${nm} は ${nmS} を唱えた！`, 800);
+  if (M.tier < 4) { const c = ps[rnd(ps.length)]; return hitChar(c, roll(1, 8), `${nm}は メラを となえた！`); }
+  const [n, d, nmS] = M.tier >= 8 ? [8, 8, 'ヒャダルコ'] : M.tier >= 6 ? [6, 6, 'ベギラマ'] : [4, 6, 'ギラ'];
+  fxSpell(M.tier >= 8 ? '#9fe6ff' : '#ff8a2a'); await show(`${nm}は ${nmS}を となえた！`, 900);
   for (const c of ps) { let dm = roll(n, d); if (rnd(20) < c.stats.luc / 3) dm = Math.floor(dm / 2); await hitChar(c, dm, '', g); }
 }
 async function victory() {
@@ -1563,10 +1667,10 @@ async function victory() {
   let gold = 0;
 
   jingle('win');
-  let t = `魔物たちを倒した！　生き残った者はそれぞれ ${each} の経験値を得た。`;
+  let t = `まものたちを やっつけた！\nそれぞれ ${each}ポイントの けいけんちを かくとく！`;
 
   const ready = alive.filter(c => c.exp >= expNext(c)).map(c => c.name);
-  if (ready.length) t += `　${ready.join('、')} はレベルが上がる準備ができた（宿で休むと上がる）。`;
+  if (ready.length) t += `\n${ready.join('、')}は レベルが上がる準備ができた（宿で休むと上がる）。`;
   if (BT.room) clearedRooms.add(state.floor + ':' + BT.roomId);
   say(t); sortParty(); renderParty(); save();
   if (BT.boss) {
@@ -1600,7 +1704,7 @@ function finishBattleView() { endBattle(true); say(''); arrive(); }
 // ===== encounters while walking =====
 const clearedRooms = new Set();
 function startBoss() {
-  const mk = (m, n) => ({ m, known: m === BOSS, mons: Array.from({ length: n }, () => { const hp = Math.max(1, roll(m.hpN, m.hd)); return { hp, max: hp, sleep: false }; }) });
+  const mk = (m, n) => ({ m, known: true, mons: Array.from({ length: n }, (_, k) => { const hp = Math.max(1, roll(m.hpN, m.hd)); return { hp, max: hp, sleep: false, tag: String.fromCharCode(65 + k) }; }) });
   const guards = MONSTERS.filter(m => m.tier >= 9);
   const g1 = guards[rnd(guards.length)], g2 = guards[rnd(guards.length)];
   BT = { groups: [mk(BOSS, 1), mk(g1, 1 + rnd(2)), mk(g2, 1 + rnd(3))], room: true, boss: true, surprise: null, friendly: false, round: 0, cmds: [], ci: 0, mode: 'cmd', exp: 0, busy: false, roomId: -9 };
@@ -1663,11 +1767,11 @@ const ITEMS = [
   IT('呪われた盾', 'S', 500, 'FPTSL', { ac: -1, cur: 1, t: 3 }),
   IT('ヘルム', 'H', 100, 'FPSL', { ac: 1 }), IT('ヘルム+1', 'H', 3000, 'FPSL', { ac: 2, t: 4 }),
   IT('銅の籠手', 'G', 6000, 'FPSL', { ac: 1, t: 4 }), IT('銀の籠手', 'G', 60000, 'FPSL', { ac: 3, t: 8 }),
-  IT('ディオスの薬', 'X', 100, '*', { use: 'ディオス', t: 1 }), IT('ラツモフィスの薬', 'X', 300, '*', { use: 'ラツモフィス', t: 1 }),
-  IT('ディアルの薬', 'X', 800, '*', { use: 'ディアル', t: 3 }), IT('ハリトの巻物', 'X', 500, '*', { use: 'ハリト', t: 1 }),
-  IT('カティノの巻物', 'X', 500, '*', { use: 'カティノ', t: 1 }), IT('バディオスの巻物', 'X', 500, '*', { use: 'バディオス', t: 2 }),
-  IT('マハリトの巻物', 'X', 3000, '*', { use: 'マハリト', t: 4 }),
-  IT('魔除けの護符', 'X', 0, '*', { use: 'マロール', t: 99, keep: 1 })
+  IT('やくそう', 'X', 100, '*', { use: 'ホイミ', t: 1 }), IT('どくけしそう', 'X', 300, '*', { use: 'キアリー', t: 1 }),
+  IT('じょうやくそう', 'X', 800, '*', { use: 'ベホイミ', t: 3 }), IT('メラの巻物', 'X', 500, '*', { use: 'メラ', t: 1 }),
+  IT('ラリホーの巻物', 'X', 500, '*', { use: 'ラリホー', t: 1 }), IT('バギの巻物', 'X', 500, '*', { use: 'バギ', t: 2 }),
+  IT('ギラの巻物', 'X', 3000, '*', { use: 'ギラ', t: 4 }),
+  IT('魔除けの護符', 'X', 0, '*', { use: 'ルーラ', t: 99, keep: 1 })
 ];
 ITEMS.forEach((it, i) => it.i = i);
 const itemByName = n => ITEMS.find(x => x.n === n);
@@ -1689,101 +1793,128 @@ function weaponOf(c) { const w = equipped(c, 'W'); return w ? ITEMS[w.t] : IT('�
 
 // ===== spells (Step 4) =====
 // tg: one=enemy one, grp=enemy group, all=all enemies, ally=one party member, party=whole party, self, none
-const SP = (n, s, lv, tg, when, d) => ({ n, s, lv, tg, when, d });
+// v2.1: Dragon-Quest style — one MP pool, spells learnt at fixed levels. k = effect handler (old Wizardry name)
+const SP = (n, k, s, lv, mp, tg, when, d, x) => ({ n, k, s, lv, mp, tg, when, d, ...(x || {}) });
 const SPELLS = [
-  SP('ハリト', 'M', 1, 'one', 'B', '炎の玉（1d8）'), SP('モグレフ', 'M', 1, 'self', 'B', '自分のACを2下げる'),
-  SP('カティノ', 'M', 1, 'grp', 'B', '1グループを眠らせる'), SP('デュマピック', 'M', 1, 'none', 'C', '現在地を知る'),
-  SP('ディルト', 'M', 2, 'grp', 'B', '敵1グループのACを2上げる'), SP('ソピック', 'M', 2, 'self', 'B', '自分のACを4下げる'),
-  SP('マハリト', 'M', 3, 'grp', 'B', '炎の嵐（4d6）'), SP('モリト', 'M', 3, 'grp', 'B', '火花（3d6）'),
-  SP('モーリス', 'M', 4, 'grp', 'B', '敵1グループのACを3上げる'), SP('ダルト', 'M', 4, 'grp', 'B', '冷気（6d6）'), SP('ラハリト', 'M', 4, 'grp', 'B', '業火（6d6）'),
-  SP('マモーリス', 'M', 5, 'all', 'B', '敵全体のACを3上げる'), SP('マカニト', 'M', 5, 'all', 'B', '弱い敵を窒息させる（レベル8未満・不死以外）'), SP('マダルト', 'M', 5, 'grp', 'B', '凍てつく嵐（8d8）'),
-  SP('ラカニト', 'M', 6, 'grp', 'B', '1グループを窒息させる'), SP('ジルワン', 'M', 6, 'one', 'B', '不死の敵を消し去る'), SP('マソピック', 'M', 6, 'party', 'B', '全員のACを4下げる'), SP('ハマン', 'M', 6, 'none', 'B', '何かが起こる'),
-  SP('マロール', 'M', 7, 'none', 'BC', 'テレポート'), SP('マハマン', 'M', 7, 'none', 'B', '大いなる何かが起こる'), SP('ティルトウェイト', 'M', 7, 'all', 'B', '核の炎（10d15）'),
-  SP('カルキ', 'P', 1, 'party', 'B', '全員のACを1下げる'), SP('ディオス', 'P', 1, 'ally', 'BC', 'HPを1d8回復'), SP('バディオス', 'P', 1, 'one', 'B', '1d8のダメージ'),
-  SP('ミルワ', 'P', 1, 'none', 'BC', 'しばらく明るくなる'), SP('ポーフィック', 'P', 1, 'self', 'B', '自分のACを4下げる'),
-  SP('マツ', 'P', 2, 'party', 'B', '全員のACを2下げる'), SP('カルフォ', 'P', 2, 'none', '', '宝箱の罠を見破る'), SP('マニフォ', 'P', 2, 'grp', 'B', '1グループを金縛りにする'), SP('モンティノ', 'P', 2, 'grp', 'B', '1グループの呪文を封じる'),
-  SP('ロミルワ', 'P', 3, 'none', 'BC', '街に戻るまで明るい'), SP('ディアルコ', 'P', 3, 'ally', 'BC', '麻痺・眠りを治す'), SP('ラツマピック', 'P', 3, 'none', 'B', '敵の正体を見破る'), SP('バマツ', 'P', 3, 'party', 'B', '全員のACを4下げる'),
-  SP('ディアル', 'P', 4, 'ally', 'BC', 'HPを2d8回復'), SP('バディアル', 'P', 4, 'one', 'B', '2d8のダメージ'), SP('ラツモフィス', 'P', 4, 'ally', 'BC', '毒を治す'), SP('マポーフィック', 'P', 4, 'none', 'BC', '街に戻るまで全員のACを2下げる'),
-  SP('ディアルマ', 'P', 5, 'ally', 'BC', 'HPを3d8回復'), SP('バディアルマ', 'P', 5, 'one', 'B', '3d8のダメージ'), SP('リトカン', 'P', 5, 'grp', 'B', '炎の柱（3d8）'),
-  SP('カンディ', 'P', 5, 'none', 'C', '迷宮に残った仲間の場所を知る'), SP('ディ', 'P', 5, 'ally', 'C', '死者を生き返らせる'), SP('バディ', 'P', 5, 'one', 'B', '敵1体を即死させる'),
-  SP('ロルト', 'P', 6, 'grp', 'B', '刃の嵐（6d6）'), SP('マディ', 'P', 6, 'ally', 'BC', 'HP全快・状態異常を治す'), SP('マバディ', 'P', 6, 'one', 'B', '敵1体のHPを1d8にする'), SP('ロクトフェイト', 'P', 6, 'none', 'BC', '街へ帰る（所持金を失う）'),
-  SP('マリクト', 'P', 7, 'all', 'B', '天の怒り（12d6）'), SP('カドルト', 'P', 7, 'ally', 'C', '死者・灰を完全に生き返らせる')
+  SP('メラ', '', 'M', 1, 2, 'one', 'B', '敵1体に火の玉（1d8+2）', { dmg: [1, 8, 2], col: '#ff8a2a' }),
+  SP('ラリホー', 'カティノ', 'M', 1, 3, 'grp', 'B', '敵1グループを眠らせる'),
+  SP('フローミ', 'デュマピック', 'M', 2, 1, 'none', 'C', '今いる場所を知る'),
+  SP('スカラ', 'スカラ', 'M', 3, 2, 'ally', 'B', '味方1人の守りを固める'),
+  SP('ギラ', '', 'M', 4, 4, 'grp', 'B', '敵1グループを炎で焼く（3d6）', { dmg: [3, 6, 0], col: '#ffb02a' }),
+  SP('ルカニ', 'ディルト', 'M', 5, 3, 'grp', 'B', '敵1グループの守りを下げる'),
+  SP('マホトーン', 'モンティノ', 'M', 6, 3, 'grp', 'B', '敵1グループの呪文を封じる'),
+  SP('イオ', '', 'M', 7, 5, 'all', 'B', '敵全体を爆発に巻きこむ（2d6）', { dmg: [2, 6, 0], col: '#fff2a0' }),
+  SP('メラミ', '', 'M', 9, 5, 'one', 'B', '敵1体に大きな火の玉（5d8）', { dmg: [5, 8, 0], col: '#ff6a1a' }),
+  SP('ベギラマ', '', 'M', 11, 6, 'grp', 'B', '敵1グループを業火で焼く（6d6）', { dmg: [6, 6, 0], col: '#ff8a2a' }),
+  SP('ヒャダルコ', '', 'M', 13, 8, 'grp', 'B', '敵1グループを氷の刃で（8d8）', { dmg: [8, 8, 0], col: '#9fe6ff' }),
+  SP('ルカナン', 'マモーリス', 'M', 14, 6, 'all', 'B', '敵全体の守りを下げる'),
+  SP('イオラ', '', 'M', 16, 8, 'all', 'B', '敵全体を大爆発で（5d6）', { dmg: [5, 6, 0], col: '#fff2a0' }),
+  SP('ルーラ', 'マロール', 'M', 18, 10, 'none', 'BC', '行き先を選んで瞬間移動（戦闘中は逃げられる）'),
+  SP('メラゾーマ', '', 'M', 20, 10, 'one', 'B', '敵1体に巨大な火の玉（12d8）', { dmg: [12, 8, 0], col: '#ff4a0a' }),
+  SP('マヒャド', '', 'M', 22, 12, 'grp', 'B', '敵1グループを氷河で（10d10）', { dmg: [10, 10, 0], col: '#bff0ff' }),
+  SP('イオナズン', '', 'M', 25, 15, 'all', 'B', '敵全体を超爆発で（10d15）', { dmg: [10, 15, 0], col: '#ffffff' }),
+  SP('パルプンテ', 'マハマン', 'M', 28, 20, 'none', 'B', '何が起こるかわからない'),
+  SP('ホイミ', '', 'P', 1, 3, 'ally', 'BC', '味方1人のHPを回復（1d8+4）', { heal: [1, 8, 4] }),
+  SP('バギ', '', 'P', 1, 3, 'grp', 'B', '敵1グループを真空の刃で（1d6+1）', { dmg: [1, 6, 1], col: '#a8ffb0' }),
+  SP('キアリー', 'ラツモフィス', 'P', 2, 2, 'ally', 'BC', '毒を消す'),
+  SP('レミーラ', 'ロミルワ', 'P', 3, 2, 'none', 'BC', '街に戻るまで明るくなる'),
+  SP('スクルト', 'マツ', 'P', 4, 3, 'party', 'B', '味方全員の守りを固める'),
+  SP('インパス', 'カルフォ', 'P', 5, 2, 'none', '', '宝箱の罠を見破る'),
+  SP('キアリク', 'ディアルコ', 'P', 6, 2, 'ally', 'BC', '眠り・マヒを治す'),
+  SP('ベホイミ', '', 'P', 7, 5, 'ally', 'BC', '味方1人のHPを大きく回復（3d8+6）', { heal: [3, 8, 6] }),
+  SP('ニフラム', 'ジルワン', 'P', 8, 4, 'grp', 'B', '不死の敵1グループを光の彼方へ消し去る'),
+  SP('リレミト', 'リレミト', 'P', 9, 8, 'none', 'C', '迷宮から街へ脱出する'),
+  SP('バギマ', '', 'P', 10, 6, 'grp', 'B', '敵1グループを竜巻で（4d8）', { dmg: [4, 8, 0], col: '#a8ffb0' }),
+  SP('ザキ', 'バディ', 'P', 11, 4, 'one', 'B', '敵1体の息の根を止める'),
+  SP('ザオラル', 'ディ', 'P', 13, 10, 'ally', 'BC', '死んだ仲間を生き返らせる（失敗することも）'),
+  SP('ベホマ', 'マディ', 'P', 15, 7, 'ally', 'BC', '味方1人を完全に回復'),
+  SP('ザラキ', 'ラカニト', 'P', 17, 7, 'grp', 'B', '敵1グループの息の根を止める'),
+  SP('バギクロス', '', 'P', 19, 10, 'grp', 'B', '敵1グループを大竜巻で（8d8）', { dmg: [8, 8, 0], col: '#a8ffb0' }),
+  SP('ベホマラー', '', 'P', 21, 12, 'party', 'BC', '味方全員のHPを回復（3d8+6）', { heal: [3, 8, 6] }),
+  SP('ザオリク', 'カドルト', 'P', 24, 20, 'ally', 'BC', '死んだ仲間を完全に生き返らせる')
 ];
-const spellByName = n => SPELLS.find(s => s.n === n);
-// character level at which each spell level becomes available
-function learnLv(c, s, L) {
-  const t = { MAG: { M: [1, 2] }, PRI: { P: [1, 2] }, BIS: { M: [1, 4], P: [4, 4] }, SAM: { M: [4, 3] }, LOR: { P: [4, 3] } }[c.cls];
-  if (!t || !t[s]) return 99; return t[s][0] + (L - 1) * t[s][1];
+const OLD_SPELL = { 'ハリト': 'メラ', 'マハリト': 'ギラ', 'モリト': 'ギラ', 'ダルト': 'ベギラマ', 'ラハリト': 'ベギラマ', 'マダルト': 'ヒャダルコ', 'ティルトウェイト': 'イオナズン', 'バディオス': 'バギ', 'バディアル': 'バギマ', 'バディアルマ': 'バギマ', 'リトカン': 'バギマ', 'ロルト': 'バギクロス', 'マリクト': 'バギクロス', 'ディオス': 'ホイミ', 'ディアル': 'ベホイミ', 'ディアルマ': 'ベホイミ', 'ミルワ': 'レミーラ', 'ロクトフェイト': 'リレミト', 'モグレフ': 'スカラ', 'ソピック': 'スカラ', 'ポーフィック': 'スカラ', 'カルキ': 'スクルト', 'バマツ': 'スクルト', 'マソピック': 'スクルト', 'マハマン': 'パルプンテ', 'ハマン': 'パルプンテ' };
+const spellByName = n => SPELLS.find(p => p.n === n) || SPELLS.find(p => p.k && p.k === n) || (OLD_SPELL[n] ? SPELLS.find(p => p.n === OLD_SPELL[n]) : undefined);
+// [multiplier, offset] on the spell's level for each casting class
+const CASTER = { MAG: { M: [1, 0] }, PRI: { P: [1, 0] }, BIS: { M: [1.4, -0.4], P: [1.4, 2] }, SAM: { M: [1.6, 3] }, LOR: { P: [1.6, 3] } };
+function learnLv(c, p) { const t = CASTER[c.cls]; if (!t || !t[p.s]) return 99; return Math.max(1, Math.round(p.lv * t[p.s][0] + t[p.s][1])); }
+function maxMP(c) {
+  if (!(c.spells || []).length) return 0;
+  const st = c.stats, stat = c.cls === 'MAG' || c.cls === 'SAM' ? st.iq : c.cls === 'PRI' || c.cls === 'LOR' ? st.pie : Math.max(st.iq, st.pie);
+  const full = c.cls === 'MAG' || c.cls === 'PRI' ? 1 : 0.7;
+  return Math.max(2, Math.round((c.level * 3 + 3) * (0.5 + stat / 30) * full));
 }
-function maxSlots(c, s, L) {
-  const ll = learnLv(c, s, L); if (c.level < ll) return 0;
-  if (!(c.spells || []).some(n => { const p = spellByName(n); return p.s === s && p.lv === L; })) return 0;
-  return Math.min(9, 1 + Math.floor((c.level - ll) / 2));
-}
-function refillMP(c) { c.mp = { M: [], P: [] }; for (const s of ['M', 'P']) for (let L = 1; L <= 7; L++) c.mp[s][L - 1] = maxSlots(c, s, L); }
-function learnSpells(c, initial) { // returns names of newly learnt spells
+function refillMP(c) { c.maxmp = maxMP(c); c.mp = c.maxmp; }
+function learnSpells(c) { // returns names of newly learnt spells
   c.spells = c.spells || []; const got = [];
-  for (const s of ['M', 'P']) for (let L = 1; L <= 7; L++) {
-    if (c.level < learnLv(c, s, L)) continue;
-    const pool = SPELLS.filter(p => p.s === s && p.lv === L && !c.spells.includes(p.n));
-    const stat = s === 'M' ? c.stats.iq : c.stats.pie;
-    let any = c.spells.some(n => { const p = spellByName(n); return p.s === s && p.lv === L; });
-    for (const p of pool) if (rnd(30) < stat || (!any && p === pool[0])) { c.spells.push(p.n); got.push(p.n); any = true; }
-  }
-  if (initial) { // the original starting spells
-    const st = { MAG: ['ハリト', 'カティノ'], PRI: ['ディオス', 'バディオス'], BIS: ['ハリト'] }[c.cls] || [];
-    c.spells = c.spells.filter(n => spellByName(n).lv > 1 || st.includes(n)); for (const n of st) if (!c.spells.includes(n)) c.spells.push(n);
-  }
+  for (const p of SPELLS) if (c.level >= learnLv(c, p) && !c.spells.includes(p.n)) { c.spells.push(p.n); got.push(p.n); }
   return got;
 }
-const castable = (c, p) => c.status === 'OK' && !c.sleep && c.mp && c.mp[p.s][p.lv - 1] > 0;
-function upgradeChar(c) { // bring old saves up to Step 4
+const castable = (c, p) => c.status === 'OK' && !c.sleep && typeof c.mp === 'number' && c.mp >= p.mp;
+function upgradeChar(c) { // bring old saves up to date
   if (!c.items) giveStarter(c);
-  if (!c.spells) { learnSpells(c, true); refillMP(c); }
-  if (!c.mp) refillMP(c);
+  if (!c.spells || typeof c.mp !== 'number') {
+    c.spells = [...new Set((c.spells || []).map(spellByName).filter(Boolean).map(p => p.n))];
+    learnSpells(c); refillMP(c);
+  }
+  c.maxmp = maxMP(c); if (c.mp > c.maxmp) c.mp = c.maxmp;
   recalc(c);
 }
 
 // ===== spell effects (battle and camp) =====
 function healChar(t, n) { const b = t.hp; t.hp = Math.min(t.maxhp, t.hp + n); return t.hp - b; }
-async function spellOnGroupDamage(g, n, d, out, label) {
-  let tot = 0, kill = 0, res = 0;
+async function spellOnGroupDamage(g, n, d, out, label, plus, col) {
+  let tot = 0, kill = 0, res = 0; const gb = BT ? groupBox(g) : null, boxes = new Map(BT ? liveMons(g).map(m => [m, monBox(m)]) : []), dead = [];
+  if (BT) fxSpell(col || (n >= 8 ? '#9fe6ff' : '#ff8a2a'));
   for (const m of liveMons(g)) {
     if (rnd(100) < g.m.res) { res++; continue; }
-    const dm = roll(n, d); m.hp -= dm; tot += dm; if (m.hp <= 0) { m.hp = 0; kill++; BT.exp += g.m.exp; }
+    const dm = roll(n, d) + (plus || 0); m.hp -= dm; tot += dm; if (m.hp <= 0) { m.hp = 0; kill++; BT.exp += g.m.exp; dead.push(m); }
   }
-  await out(`${groupName(g)} に ${label || ''}合計 ${tot} のダメージ。${kill ? kill + '匹を倒した！' : ''}${res ? `（${res}匹は呪文をはね返した）` : ''}`);
-  if (kill) sfx('kill');
+  await out(tot ? `${groupName(g)}${g.mons.length > 1 ? "たち" : ""}に 合計 ${tot}の ダメージ！${kill ? `\n${kill}匹 やっつけた！` : ''}${res ? `\n（${res}匹には きかなかった）` : ''}` : `しかし ${groupName(g)}には きかなかった！`);
+  if (kill) { sfx('kill'); if (BT) setTimeout(() => dead.forEach(m => fxMonDie(g, boxes.get(m))), 200); }
+  if (BT && tot && gb) fxNumber(gb.x + gb.w / 2, gb.y + (gb.h || gb.w) / 3, String(tot), '#ffe066');
 }
 async function doSpell(c, p, tg, out, inBattle, item) {
-  if (!item) c.mp[p.s][p.lv - 1]--;
+  if (!item) c.mp -= p.mp;
   sfx('spell');
-  await out(item ? `${c.name} は ${itName(item)} を使った。` : `${c.name} は ${p.n} を唱えた！`);
+  await out(item ? `${c.name}は ${itName(item)}を つかった！` : `${c.name}は ${p.n}を となえた！`);
   const g = tg && tg.g != null && BT ? BT.groups[tg.g] : null;
   const ally = tg && tg.c ? tg.c : null;
   const ps = partyChars();
-  const dmgSpell = { 'マハリト': [4, 6], 'モリト': [3, 6], 'ダルト': [6, 6], 'ラハリト': [6, 6], 'マダルト': [8, 8], 'リトカン': [3, 8], 'ロルト': [6, 6] };
-  const oneSpell = { 'ハリト': [1, 8], 'バディオス': [1, 8], 'バディアル': [2, 8], 'バディアルマ': [3, 8] };
-  const healSpell = { 'ディオス': [1, 8], 'ディアル': [2, 8], 'ディアルマ': [3, 8] };
-  const n = p.n;
-  if (dmgSpell[n] && g) return spellOnGroupDamage(g, dmgSpell[n][0], dmgSpell[n][1], out);
-  if (oneSpell[n] && g) {
-    const m = liveMons(g)[rnd(liveMons(g).length)]; if (!m) return;
-    if (rnd(100) < g.m.res) return out(`${groupName(g)} は呪文をはね返した。`);
-    const dm = roll(...oneSpell[n]); m.hp -= dm;
-    if (m.hp <= 0) { m.hp = 0; BT.exp += g.m.exp; sfx('kill'); return out(`${groupName(g)} に ${dm} のダメージ。倒した！`); }
-    return out(`${groupName(g)} に ${dm} のダメージ。`);
+  if (p.dmg && BT) {
+    const [dn, dd, plus] = p.dmg;
+    if (p.tg === 'all') { for (const gg of liveGroups()) await spellOnGroupDamage(gg, dn, dd, out, '', plus, p.col); return; }
+    if (!g) return;
+    if (p.tg === 'grp') return spellOnGroupDamage(g, dn, dd, out, '', plus, p.col);
+    const m = liveMons(g)[0]; if (!m) return; const mb = monBox(m);
+    fxSpell(p.col || '#ff8a2a');
+    if (rnd(100) < g.m.res) return out(`しかし ${monName(g, m)}には きかなかった！`);
+    const dm = roll(dn, dd) + plus; m.hp -= dm; fxNumber(mb.x + mb.w / 2, mb.y + mb.w / 3, String(dm), '#ffe066');
+    if (m.hp <= 0) { m.hp = 0; BT.exp += g.m.exp; sfx('kill'); setTimeout(() => fxMonDie(g, mb), 200); return out(`${monName(g, m)}に ${dm}の ダメージ！\n${monName(g, m)}を やっつけた！`); }
+    return out(`${monName(g, m)}に ${dm}の ダメージ！`);
   }
-  if (healSpell[n] && ally) {
-    if (ally.status !== 'OK') return out(`${ally.name} には効かなかった。`);
-    const h = healChar(ally, roll(...healSpell[n])); sfx('heal'); return out(`${ally.name} のHPが ${h} 回復した。（${ally.hp}/${ally.maxhp}）`);
+  if (p.heal) {
+    const tgs = p.tg === 'party' ? ps.filter(x => x.status === 'OK') : ally ? [ally] : [];
+    const lines = [];
+    for (const a of tgs) {
+      if (a.status !== 'OK') { lines.push(`${a.name}には きかなかった。`); continue; }
+      const h = healChar(a, roll(p.heal[0], p.heal[1]) + p.heal[2]); if (BT) fxHeal(a, h);
+      lines.push(a.hp >= a.maxhp ? `${a.name}の キズが かいふくした！（${a.hp}/${a.maxhp}）` : `${a.name}の HPが ${h} かいふくした！（${a.hp}/${a.maxhp}）`);
+    }
+    sfx('heal'); return out(lines.join('\n') || 'しかし なにも おこらなかった。');
   }
+  const n = p.k;
   switch (n) {
     case 'ティルトウェイト': case 'マリクト':
       for (const gg of liveGroups()) await spellOnGroupDamage(gg, n === 'マリクト' ? 12 : 10, n === 'マリクト' ? 6 : 15, out); return;
+    case 'スカラ': if (!ally) return; ally.bac = (ally.bac || 0) + 2; return out(`${ally.name}の 守りが あがった！`);
+    case 'リレミト': {
+      await out('パーティは 光に つつまれ、迷宮の外へ 脱出した！');
+      closeCamp(); goTown('リレミトで城塞都市に戻った。'); return 'town';
+    }
     case 'カティノ': case 'マニフォ': {
       let s = 0; for (const m of liveMons(g)) if (rnd(100) >= g.m.res && (n === 'マニフォ' || g.m.lv < 8 + rnd(4))) { m.sleep = true; s++; }
-      return out(s ? `${groupName(g)} の ${s}匹が${n === 'カティノ' ? '眠った' : '金縛りになった'}。` : '効かなかった。');
+      return out(s ? `${groupName(g)}${g.mons.length > 1 ? "たち" : ""}の ${s}匹を 眠らせた！` : `しかし ${groupName(g)}には きかなかった！`);
     }
     case 'モンティノ': if (rnd(100) >= g.m.res) { g.silent = true; return out(`${groupName(g)} は呪文を唱えられなくなった。`); } return out('効かなかった。');
     case 'ディルト': g.acMod = (g.acMod || 0) + 2; return out(`${groupName(g)} の守りが弱まった。`);
@@ -1800,20 +1931,20 @@ async function doSpell(c, p, tg, out, inBattle, item) {
       let k = 0; for (const gg of liveGroups()) if (gg.m.lv < 8 && gg.m.ty !== 'UND') for (const m of liveMons(gg)) if (rnd(100) >= gg.m.res) { m.hp = 0; k++; BT.exp += gg.m.exp; }
       return out(k ? `${k}匹の敵が息絶えた。` : '効かなかった。');
     }
-    case 'ラカニト': { let k = 0; for (const m of liveMons(g)) if (rnd(100) >= g.m.res + 10) { m.hp = 0; k++; BT.exp += g.m.exp; } return out(k ? `${groupName(g)} の ${k}匹が息絶えた。` : '効かなかった。'); }
-    case 'ジルワン': { if (g.m.ty !== 'UND') return out('効かなかった。（不死の敵にしか効かない）'); for (const m of liveMons(g)) { m.hp = 0; BT.exp += g.m.exp; } return out(`${groupName(g)} は消え去った！`); }
-    case 'バディ': { const m = liveMons(g)[0]; if (m && rnd(100) >= g.m.res + 25) { m.hp = 0; BT.exp += g.m.exp; return out(`${groupName(g)} を1体、即死させた！`); } return out('効かなかった。'); }
+    case 'ラカニト': { fxSpell('#7a2aff'); let k = 0; for (const m of liveMons(g)) if (rnd(100) >= g.m.res + 10) { const mb = monBox(m); m.hp = 0; k++; BT.exp += g.m.exp; setTimeout(() => fxMonDie(g, mb), 200); } if (k) sfx('kill'); return out(k ? `${groupName(g)}${g.mons.length > 1 ? "たち" : ""}の ${k}匹が 息たえた！` : `しかし ${groupName(g)}には きかなかった！`); }
+    case 'ジルワン': { fxSpell('#fffbd0'); if (g.m.ty !== 'UND') return out(`しかし ${groupName(g)}には きかなかった！（不死の敵にだけ効く）`); for (const m of liveMons(g)) { m.hp = 0; BT.exp += g.m.exp; } return out(`${groupName(g)}${g.mons.length > 1 ? "たち" : ""}は 光の彼方に 消えさった！`); }
+    case 'バディ': { const m = liveMons(g)[0]; if (!m) return; const mb = monBox(m); fxSpell('#7a2aff'); if (rnd(100) >= g.m.res + 25) { m.hp = 0; BT.exp += g.m.exp; sfx('kill'); setTimeout(() => fxMonDie(g, mb), 200); return out(`${monName(g, m)}は 息たえた！`); } return out(`しかし ${monName(g, m)}には きかなかった！`); }
     case 'マバディ': { const m = liveMons(g)[0]; if (m && rnd(100) >= g.m.res) { m.hp = Math.min(m.hp, roll(1, 8)); return out(`${groupName(g)} の生命力を奪った。`); } return out('効かなかった。'); }
     case 'ハマン': case 'マハマン': {
       const r = rnd(3);
       if (r === 0) { for (const x of ps) if (x.status === 'OK') x.hp = x.maxhp; sfx('heal'); return out('光が満ち、全員の傷が癒えた！'); }
-      if (r === 1 && inBattle) { for (const gg of liveGroups()) await spellOnGroupDamage(gg, n === 'マハマン' ? 12 : 8, 10, out); return; }
+      if (r === 1 && inBattle) { for (const gg of liveGroups()) await spellOnGroupDamage(gg, 12, 10, out, '', 0, '#ffffff'); return; }
       if (inBattle) { BT.pac = (BT.pac || 0) + 10; return out('見えない盾がパーティを包んだ！'); }
       return out('何も起こらなかった。');
     }
     case 'ミルワ': state.light = Math.max(state.light || 0, 40); return out('あたりが明るくなった。');
     case 'ロミルワ': state.lightX = true; return out('魔法の光がパーティを照らす。（街に戻るまで）');
-    case 'デュマピック': return out(`現在地は地下${state.floor}階、X:${state.x} Y:${state.y}、${DN[state.dir]}向き。`);
+    case 'デュマピック': return out(`ここは地下${state.floor}階、X:${state.x} Y:${state.y}、${DN[state.dir]}向き。`);
     case 'カンディ': {
       const bs = state.roster.filter(x => x.inMaze && !state.party.includes(x.id) && x.loc);
       return out(bs.length ? bs.map(x => `${x.name}：地下${x.loc.f}階 X:${x.loc.x} Y:${x.loc.y}`).join('\n') : '迷宮に残っている仲間はいない。');
@@ -2375,20 +2506,17 @@ function renderCamp() {
     h = `<div class="tv">${m}<p class="lead">誰に渡しますか？</p><div class="tlist">` + ps.filter(x => x !== c).map(x => CB('to:' + x.id, `${esc(x.name)}（${x.items.length}/8）`)).join('') + `${CB('char:' + c.id, 'やめる', 'sub')}</div></div>`;
   } else if (cview === 'spells') {
     h = `<div class="tv">${m}<h2>${esc(c.name)} の呪文</h2>`;
-    for (const s of ['M', 'P']) {
-      const known = SPELLS.filter(p => p.s === s && c.spells.includes(p.n)); if (!known.length) continue;
-      h += `<p class="lead" style="margin:6px 0">${s === 'M' ? '魔術師系' : '僧侶系'}　残り回数：${[1, 2, 3, 4, 5, 6, 7].map(L => maxSlots(c, s, L) ? `Lv${L}:${c.mp[s][L - 1]}/${maxSlots(c, s, L)}` : '').filter(Boolean).join('　')}</p>`;
-      for (const p of known) {
-        const ok = p.when.includes('C') && castable(c, p);
-        h += `<div class="mem"><div class="i"><div class="n">${p.n} <small style="color:#9fb3d9">Lv${p.lv}</small></div><div class="d">${p.d}${p.when.includes('C') ? '' : '（戦闘中のみ）'}</div></div>${p.when.includes('C') ? CB('cast:' + p.n, '唱える', '', !ok) : ''}</div>`;
-      }
+    h += `<p class="lead" style="margin:6px 0">MP ${c.mp} / ${c.maxmp}</p>`;
+    for (const p of SPELLS.filter(p => c.spells.includes(p.n))) {
+      const ok = p.when.includes('C') && castable(c, p);
+      h += `<div class="mem"><div class="i"><div class="n">${p.n} <small style="color:#9fb3d9">MP${p.mp}</small></div><div class="d">${p.d}${p.when.includes('C') ? '' : '（戦闘中のみ）'}</div></div>${p.when.includes('C') ? CB('cast:' + p.n, '唱える', '', !ok) : ''}</div>`;
     }
     h += `<div class="trow">${CB('back', '戻る', 'sub')}</div></div>`;
   } else if (cview === 'ally') {
     h = `<div class="tv">${m}<p class="lead">誰に？</p><div class="tlist">` + ps.map(x => CB('ally:' + x.id, `${esc(x.name)}（${x.status} HP ${x.hp}/${x.maxhp}${x.poison ? '・毒' : ''}）`)).join('') + `${CB('back', 'やめる', 'sub')}</div></div>`;
   } else if (cview === 'malor') {
     const st = (k, lab, v) => `<div class="st"><span>${lab}</span><b>${v}</b>${CB('ml:' + k + ':-1', '－')}${CB('ml:' + k + ':1', '＋')}</div>`;
-    h = `<div class="tv">${m}<h2>マロール（テレポート）</h2><p class="lead">行き先を決めてください。行ったことのある階まで選べます。</p><div class="stbox">
+    h = `<div class="tv">${m}<h2>ルーラ（瞬間移動）</h2><p class="lead">行き先を決めてください。行ったことのある階まで選べます。</p><div class="stbox">
       ${st('f', '階', 'B' + malor.f)}${st('x', 'X', malor.x)}${st('y', 'Y', malor.y)}</div>
       <div class="trow">${CB('back', 'やめる', 'sub')}${CB('mlgo', 'テレポート！', 'act')}</div></div>`;
   }
@@ -2757,7 +2885,7 @@ if (load()) {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
-window.__meikyu = { startBoss, showEnding, goTown, ITEMS, SPELLS, openCamp, doSpell, changeFloorTo, featAt, startBattle, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
+window.__meikyu = { startBoss, showEnding, goTown, ITEMS, SPELLS, openCamp, doSpell, changeFloorTo, featAt, startBattle, quickParty, enterMaze, doSpell, spellByName, monLayout, monBox, monName, liveMons, fxSlash, fxMiss, get BT() { return BT; }, MONSTERS, expNext, levelUp, townAct, showTown, getFloor, get state() { return state; }, act, tryGen, arrive, renderNow, setDir: d => { curAng = d * Math.PI / 2; } };
 })();
 </script>
 </body>
